@@ -145,16 +145,16 @@ export const INITIAL_TEACHERS: Teacher[] = [
     name: 'Anmol Ratan',
     isClassTeacher: { classLevel: 'VII', section: 'C' },
     assignedClasses: [
-      { classLevel: 'VII', section: 'A', subject: 'Mathematics' },
-      { classLevel: 'VII', section: 'B', subject: 'Mathematics' },
-      { classLevel: 'VII', section: 'C', subject: 'Mathematics' },
-      { classLevel: 'VII', section: 'D', subject: 'Mathematics' }
+      { classLevel: 'VII', section: 'A', subject: 'Social Science' },
+      { classLevel: 'VII', section: 'B', subject: 'Social Science' },
+      { classLevel: 'VII', section: 'C', subject: 'Social Science' },
+      { classLevel: 'VII', section: 'D', subject: 'Social Science' }
     ]
   },
   {
-    id: 'sanjay-mishra',
-    email: 'sanjaymishra@sacredheartkoderma.org',
-    name: 'Sanjay Mishra',
+    id: 'sanjay-kumar',
+    email: 'sanjaykumar@sacredheartkoderma.org',
+    name: 'Sanjay Kumar',
     isClassTeacher: { classLevel: 'VII', section: 'D' },
     assignedClasses: [
       { classLevel: 'V', section: 'A', subject: 'Sanskrit' },
@@ -168,6 +168,40 @@ export const INITIAL_TEACHERS: Teacher[] = [
       { classLevel: 'VII', section: 'B', subject: 'Sanskrit' },
       { classLevel: 'VII', section: 'C', subject: 'Sanskrit' },
       { classLevel: 'VII', section: 'D', subject: 'Sanskrit' }
+    ]
+  },
+  {
+    id: 'ramesh-kunj',
+    email: 'rameshkunj6311@gmail.com',
+    name: 'Ramesh Kunj',
+    assignedClasses: [
+      { classLevel: 'VI', section: 'A', subject: 'Mathematics' },
+      { classLevel: 'VI', section: 'B', subject: 'Mathematics' },
+      { classLevel: 'VI', section: 'D', subject: 'Mathematics' }
+    ]
+  },
+  {
+    id: 'sujeet-pratap',
+    email: 'sujeetpratapsingh@sacredheartkoderma.org',
+    name: 'Sujeet Pratap Singh',
+    assignedClasses: [
+      { classLevel: 'VII', section: 'A', subject: 'Mathematics' },
+      { classLevel: 'VII', section: 'B', subject: 'Mathematics' },
+      { classLevel: 'VII', section: 'C', subject: 'Mathematics' },
+      { classLevel: 'VII', section: 'D', subject: 'Mathematics' },
+      { classLevel: 'VII', section: 'C', subject: 'Science' },
+      { classLevel: 'VII', section: 'D', subject: 'Science' }
+    ]
+  },
+  {
+    id: 'ashutosh-gautam',
+    email: 'GAUTAM663@gmail.com',
+    name: 'Ashutosh Kumar Gautam',
+    assignedClasses: [
+      { classLevel: 'VII', section: 'A', subject: 'Computer' },
+      { classLevel: 'VII', section: 'B', subject: 'Computer' },
+      { classLevel: 'VII', section: 'C', subject: 'Computer' },
+      { classLevel: 'VII', section: 'D', subject: 'Computer' }
     ]
   }
 ];
