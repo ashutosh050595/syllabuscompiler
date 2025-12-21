@@ -19,26 +19,39 @@ const App: React.FC = () => {
   const syncUrlRef = useRef<string>('');
 
   useEffect(() => {
-    const savedTeachers = localStorage.getItem('sh_teachers_v4');
-    const savedSubmissions = localStorage.getItem('sh_submissions_v2');
-    const savedSyncUrl = localStorage.getItem('sh_sync_url');
-    
-    const initialTeachers = savedTeachers ? JSON.parse(savedTeachers) : INITIAL_TEACHERS;
-    const initialSubmissions = savedSubmissions ? JSON.parse(savedSubmissions) : [];
-    
-    setTeachers(initialTeachers);
-    teachersRef.current = initialTeachers;
-    
-    setSubmissions(initialSubmissions);
-    submissionsRef.current = initialSubmissions;
-    
-    if (savedSyncUrl) {
-      setSyncUrl(savedSyncUrl);
-      syncUrlRef.current = savedSyncUrl;
-    }
+    try {
+      const savedTeachers = localStorage.getItem('sh_teachers_v4');
+      const savedSubmissions = localStorage.getItem('sh_submissions_v2');
+      const savedSyncUrl = localStorage.getItem('sh_sync_url');
+      const savedUser = sessionStorage.getItem('sh_user');
+      
+      const initialTeachers = savedTeachers ? JSON.parse(savedTeachers) : INITIAL_TEACHERS;
+      const initialSubmissions = savedSubmissions ? JSON.parse(savedSubmissions) : [];
+      
+      setTeachers(initialTeachers);
+      teachersRef.current = initialTeachers;
+      
+      setSubmissions(initialSubmissions);
+      submissionsRef.current = initialSubmissions;
+      
+      if (savedSyncUrl) {
+        setSyncUrl(savedSyncUrl);
+        syncUrlRef.current = savedSyncUrl;
+      }
 
-    const savedUser = sessionStorage.getItem('sh_user');
-    if (savedUser) setUser(JSON.parse(savedUser));
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+        } catch (e) {
+          sessionStorage.removeItem('sh_user');
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load local storage data:", error);
+      // Fallback to defaults if storage is corrupted
+      setTeachers(INITIAL_TEACHERS);
+      teachersRef.current = INITIAL_TEACHERS;
+    }
 
     // Initialize Scheduler
     const interval = setInterval(runAutonomousScheduler, 60000); // Check every minute

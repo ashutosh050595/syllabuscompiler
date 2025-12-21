@@ -1,3 +1,4 @@
+
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -6,10 +7,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // Securely inject the API key during build
-      'process.env.API_KEY': JSON.stringify(env.API_KEY),
-      // Polyfill process.env for other usages if necessary
-      'process.env': {}
+      // Securely inject the API key during build. Default to empty string if undefined to prevent undefined replacement.
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
     },
     server: {
       port: 3000
