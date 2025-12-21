@@ -79,6 +79,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'neha-kumari', 
     email: 'nehajmt81@gmail.com', 
     name: 'Neha Kumari', 
+    isClassTeacher: { classLevel: 'VI', section: 'B' },
     assignedClasses: [
       { classLevel: 'V', section: 'A', subject: 'Mathematics' },
       { classLevel: 'V', section: 'B', subject: 'Mathematics' },
@@ -155,7 +156,6 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'sanjay-kumar',
     email: 'sanjaykumar@sacredheartkoderma.org',
     name: 'Sanjay Kumar',
-    isClassTeacher: { classLevel: 'VII', section: 'D' },
     assignedClasses: [
       { classLevel: 'V', section: 'A', subject: 'Sanskrit' },
       { classLevel: 'V', section: 'B', subject: 'Sanskrit' },
@@ -182,8 +182,9 @@ export const INITIAL_TEACHERS: Teacher[] = [
   },
   {
     id: 'sujeet-pratap',
-    email: 'sujeetpratapsingh@sacredheartkoderma.org',
+    email: 'sujeetpratapsingh65908@gmail.com',
     name: 'Sujeet Pratap Singh',
+    isClassTeacher: { classLevel: 'VII', section: 'D' },
     assignedClasses: [
       { classLevel: 'VII', section: 'A', subject: 'Mathematics' },
       { classLevel: 'VII', section: 'B', subject: 'Mathematics' },
