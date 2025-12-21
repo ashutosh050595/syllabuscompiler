@@ -86,7 +86,7 @@ export const generateSyllabusPDF = (
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(150, 150, 150);
       doc.text('Sacred Heart School Automation - Academic Management System', 15, footerY);
-      doc.text(`Page ${doc.internal.getNumberOfPages()}`, pageWidth - 25, footerY);
+      doc.text(`Page ${(doc as any).internal.getNumberOfPages()}`, pageWidth - 25, footerY);
     }
   });
 
