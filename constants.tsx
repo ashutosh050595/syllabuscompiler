@@ -4,7 +4,7 @@ import { Teacher, ClassLevel } from './types';
 export const SCHOOL_NAME = "SACRED HEART SCHOOL";
 export const SCHOOL_SUBTITLE = "(Affiliated to CBSE, New Delhi, upto +2 Level)";
 export const ADMIN_EMAIL = "admin@sacredheartkoderma.org";
-export const SCHOOL_LOGO_URL = "/logo.png";
+export const SCHOOL_LOGO_URL = "logo.png";
 
 export const CLASS_STYLES: Record<ClassLevel, { bg: string, text: string }> = {
   'V': { bg: 'bg-blue-600', text: 'text-blue-600' },

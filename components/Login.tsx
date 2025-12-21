@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Teacher } from '../types';
-import { ADMIN_EMAIL, SCHOOL_LOGO_URL } from '../constants';
+import { ADMIN_EMAIL, SCHOOL_LOGO_URL, SCHOOL_NAME } from '../constants';
 
 interface Props {
   onLogin: (user: Teacher | { email: string; isAdmin: true }) => void;
@@ -13,6 +13,7 @@ const Login: React.FC<Props> = ({ onLogin, teachers }) => {
   const [password, setPassword] = useState('');
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [error, setError] = useState('');
+  const [imgError, setImgError] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +43,7 @@ const Login: React.FC<Props> = ({ onLogin, teachers }) => {
         <div className="bg-blue-600 p-12 text-center text-white relative">
           <div className="absolute top-6 right-6">
              <button 
+              type="button"
               onClick={() => { setIsAdminMode(!isAdminMode); setError(''); }}
               className="text-[9px] uppercase font-black tracking-widest bg-white/20 px-4 py-1.5 rounded-full hover:bg-white/30 transition-colors"
              >
@@ -49,7 +51,19 @@ const Login: React.FC<Props> = ({ onLogin, teachers }) => {
              </button>
           </div>
           <div className="w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl transform rotate-6 animate-in zoom-in duration-500 overflow-hidden p-4">
-            <img src={SCHOOL_LOGO_URL} alt="School Logo" className="w-full h-full object-contain" />
+            {imgError ? (
+              <div className="text-blue-600 flex flex-col items-center">
+                <i className="fas fa-school text-4xl"></i>
+                <span className="text-[8px] font-black mt-1 uppercase">SHS</span>
+              </div>
+            ) : (
+              <img 
+                src={SCHOOL_LOGO_URL} 
+                alt="School Logo" 
+                className="w-full h-full object-contain" 
+                onError={() => setImgError(true)}
+              />
+            )}
           </div>
           <h2 className="text-3xl font-black tracking-tight">{isAdminMode ? 'Admin Portal' : 'Faculty Login'}</h2>
           <p className="text-blue-100 mt-3 opacity-90 text-sm font-medium">Sacred Heart Academic Management</p>
@@ -57,7 +71,7 @@ const Login: React.FC<Props> = ({ onLogin, teachers }) => {
 
         <form onSubmit={handleLogin} className="p-12 space-y-8">
           {error && (
-            <div className="p-5 bg-red-50 border border-red-200 text-red-600 text-sm rounded-2xl flex items-center space-x-3 animate-bounce">
+            <div className="p-5 bg-red-50 border border-red-200 text-red-600 text-sm rounded-2xl flex items-center space-x-3 animate-pulse">
               <i className="fas fa-triangle-exclamation"></i>
               <span className="font-bold">{error}</span>
             </div>

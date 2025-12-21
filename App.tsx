@@ -12,6 +12,7 @@ const App: React.FC = () => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [submissions, setSubmissions] = useState<WeeklySubmission[]>([]);
   const [syncUrl, setSyncUrl] = useState<string>('');
+  const [logoLoaded, setLogoLoaded] = useState(true);
   
   // Refs to avoid stale closures in scheduler
   const teachersRef = useRef<Teacher[]>([]);
@@ -48,24 +49,21 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to load local storage data:", error);
-      // Fallback to defaults if storage is corrupted
       setTeachers(INITIAL_TEACHERS);
       teachersRef.current = INITIAL_TEACHERS;
     }
 
-    // Initialize Scheduler
-    const interval = setInterval(runAutonomousScheduler, 60000); // Check every minute
+    const interval = setInterval(runAutonomousScheduler, 60000);
     return () => clearInterval(interval);
   }, []);
 
   const runAutonomousScheduler = () => {
     const now = new Date();
-    const day = now.getDay(); // 0=Sun, 4=Thu, 5=Fri, 6=Sat
+    const day = now.getDay();
     const hour = now.getHours();
     const dateStr = now.toISOString().split('T')[0];
     const monday = getCurrentWeekMonday();
 
-    // 1. Reminder Logic: Thursday, Friday, Saturday at 2 PM (Hour 14)
     if ([4, 5, 6].includes(day) && hour === 14) {
       const runKey = `auto_remind_${dateStr}`;
       if (!localStorage.getItem(runKey) && syncUrlRef.current) {
@@ -81,7 +79,6 @@ const App: React.FC = () => {
       }
     }
 
-    // 2. Compilation Logic: Saturday at 9 PM (Hour 21)
     if (day === 6 && hour === 21) {
       const runKey = `auto_compile_${dateStr}`;
       if (!localStorage.getItem(runKey) && syncUrlRef.current) {
@@ -102,7 +99,6 @@ const App: React.FC = () => {
       const classTeacher = teachersRef.current.find(t => t.isClassTeacher?.classLevel === cls.level && t.isClassTeacher?.section === cls.sec);
       if (!classTeacher) continue;
 
-      // Map required subjects for this class
       const requirements = teachersRef.current.flatMap(t => 
         t.assignedClasses
           .filter(ac => ac.classLevel === cls.level && ac.section === cls.sec)
@@ -226,11 +222,18 @@ const App: React.FC = () => {
       <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <img 
-              src={SCHOOL_LOGO_URL} 
-              alt={`${SCHOOL_NAME} Logo`} 
-              className="w-14 h-14 object-contain"
-            />
+            <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center overflow-hidden">
+              {logoLoaded ? (
+                <img 
+                  src={SCHOOL_LOGO_URL} 
+                  alt="SHS" 
+                  className="w-full h-full object-contain"
+                  onError={() => setLogoLoaded(false)}
+                />
+              ) : (
+                <i className="fas fa-school text-blue-600 text-2xl"></i>
+              )}
+            </div>
             <div>
               <h1 className="text-xl font-black text-blue-800 tracking-tight leading-none uppercase">{SCHOOL_NAME}</h1>
               <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-widest">Jhumri Telaiya, Estd. 1997</p>
@@ -282,11 +285,9 @@ const App: React.FC = () => {
 
       <footer className="bg-white py-12 px-4 border-t border-gray-100 mt-20">
         <div className="max-w-6xl mx-auto text-center space-y-4">
-          <img 
-            src={SCHOOL_LOGO_URL} 
-            alt="School Logo" 
-            className="w-12 h-12 mx-auto grayscale opacity-30"
-          />
+          <div className="w-12 h-12 mx-auto grayscale opacity-30 flex items-center justify-center">
+             <i className="fas fa-school text-3xl"></i>
+          </div>
           <div>
             <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em]">
               Designed and developed by ASHUTOSH KUMAR GAUTAM
