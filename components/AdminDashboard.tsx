@@ -15,12 +15,33 @@ interface Props {
   onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => Promise<any>;
 }
 
+interface BatchStatus {
+  isActive: boolean;
+  type: 'reminders' | 'emails' | null;
+  total: number;
+  current: number;
+  currentName: string;
+  isFinished: boolean;
+  log: string[];
+}
+
 const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, syncUrl, setSyncUrl, onSendWarnings, onSendPdf }) => {
   const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'settings' | 'archive'>('monitor');
   const nextWeek = getNextWeekMonday();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Partial<Teacher> | null>(null);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  
+  // Batch Progress State
+  const [batchStatus, setBatchStatus] = useState<BatchStatus>({
+    isActive: false,
+    type: null,
+    total: 0,
+    current: 0,
+    currentName: '',
+    isFinished: false,
+    log: []
+  });
 
   // Form State for "Teaching Assignments" builder in Modal
   const [tempAssignment, setTempAssignment] = useState<AssignedClass>({ classLevel: 'I', section: 'A', subject: '' });
@@ -47,17 +68,40 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
       alert("Excellent! All teachers have submitted plans for next week.");
       return;
     }
-    setIsProcessing('reminders');
-    const list = missingTeachers.map(t => ({ name: t.name, email: t.email }));
-    await onSendWarnings(list, nextWeek);
-    setIsProcessing(null);
+
+    setBatchStatus({
+      isActive: true,
+      type: 'reminders',
+      total: missingTeachers.length,
+      current: 0,
+      currentName: '',
+      isFinished: false,
+      log: []
+    });
+
+    for (let i = 0; i < missingTeachers.length; i++) {
+      const t = missingTeachers[i];
+      setBatchStatus(prev => ({ 
+        ...prev, 
+        current: i + 1, 
+        currentName: t.name,
+        log: [...prev.log, `Sending reminder to ${t.name}...`]
+      }));
+      
+      // We send them individually to show progress in UI
+      await onSendWarnings([{ name: t.name, email: t.email }], nextWeek);
+      
+      setBatchStatus(prev => {
+        const newLog = [...prev.log];
+        newLog[newLog.length - 1] = `✅ Sent to ${t.name}`;
+        return { ...prev, log: newLog };
+      });
+    }
+
+    setBatchStatus(prev => ({ ...prev, isFinished: true, currentName: 'All Reminders Sent!' }));
   };
 
   const handleGlobalEmailCompilation = async () => {
-    setIsProcessing('emails');
-    let sentCount = 0;
-    
-    // Get unique classes from registry
     const activeClasses = teachers.reduce((acc, t) => {
       if (t.isClassTeacher) {
         acc.push({ level: t.isClassTeacher.classLevel, sec: t.isClassTeacher.section, teacher: t });
@@ -65,19 +109,51 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
       return acc;
     }, [] as { level: ClassLevel, sec: Section, teacher: Teacher }[]);
 
-    for (const cls of activeClasses) {
+    if (activeClasses.length === 0) return;
+
+    setBatchStatus({
+      isActive: true,
+      type: 'emails',
+      total: activeClasses.length,
+      current: 0,
+      currentName: '',
+      isFinished: false,
+      log: []
+    });
+
+    for (let i = 0; i < activeClasses.length; i++) {
+      const cls = activeClasses[i];
+      setBatchStatus(prev => ({ 
+        ...prev, 
+        current: i + 1, 
+        currentName: `Class ${cls.level}-${cls.sec}`,
+        log: [...prev.log, `Compiling PDF for Class ${cls.level}-${cls.sec}...`]
+      }));
+
       const relevantSubmissions = submissions.filter(s => s.weekStarting === nextWeek).flatMap(s => 
         s.plans.filter(p => p.classLevel === cls.level && p.section === cls.sec).map(p => ({ ...p, teacherName: s.teacherName }))
       );
+
       if (relevantSubmissions.length > 0) {
         const doc = generateSyllabusPDF(relevantSubmissions, { name: cls.teacher.name, email: cls.teacher.email, classLevel: cls.level, section: cls.sec }, nextWeek, "Saturday");
         const pdfBase64 = doc.output('datauristring');
         await onSendPdf(pdfBase64, cls.teacher.email, `${cls.level}-${cls.sec}`, `Syllabus_${cls.level}${cls.sec}_${nextWeek}.pdf`);
-        sentCount++;
+        
+        setBatchStatus(prev => {
+          const newLog = [...prev.log];
+          newLog[newLog.length - 1] = `✅ Emailed Class ${cls.level}-${cls.sec} to ${cls.teacher.name}`;
+          return { ...prev, log: newLog };
+        });
+      } else {
+        setBatchStatus(prev => {
+          const newLog = [...prev.log];
+          newLog[newLog.length - 1] = `⚠️ Skipped Class ${cls.level}-${cls.sec} (No submissions)`;
+          return { ...prev, log: newLog };
+        });
       }
     }
-    setIsProcessing(null);
-    alert(`Batch Complete: ${sentCount} plans emailed.`);
+
+    setBatchStatus(prev => ({ ...prev, isFinished: true, currentName: 'Batch Mail Complete!' }));
   };
 
   const sendWhatsAppNudge = (teacher: Teacher, classKey: string) => {
@@ -105,6 +181,69 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      
+      {/* Batch Processing Progress Overlay */}
+      {batchStatus.isActive && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-gray-900/80 backdrop-blur-xl transition-all">
+          <div className="bg-white rounded-[4rem] shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/20">
+            <div className={`p-10 text-center space-y-6 ${batchStatus.isFinished ? 'bg-emerald-50' : 'bg-blue-50'}`}>
+              <div className="flex justify-center">
+                <div className={`w-24 h-24 rounded-[2.5rem] flex items-center justify-center text-4xl shadow-2xl ${batchStatus.isFinished ? 'bg-emerald-600 text-white animate-bounce' : 'bg-blue-600 text-white'}`}>
+                  {batchStatus.isFinished ? (
+                    <i className="fas fa-check-double"></i>
+                  ) : (
+                    <i className={`fas ${batchStatus.type === 'reminders' ? 'fa-paper-plane animate-pulse' : 'fa-file-pdf animate-spin-slow'}`}></i>
+                  )}
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-3xl font-black text-gray-900 tracking-tight">
+                  {batchStatus.isFinished ? 'Mission Complete!' : (batchStatus.type === 'reminders' ? 'Sending Reminders' : 'Compiling Reports')}
+                </h3>
+                <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-2">
+                  {batchStatus.isFinished ? 'Total Tasks Handled Successfully' : `Processing ${batchStatus.current} of ${batchStatus.total}`}
+                </p>
+              </div>
+
+              {!batchStatus.isFinished && (
+                <div className="space-y-4">
+                  <div className="w-full bg-gray-200 h-4 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-600 transition-all duration-500 ease-out shadow-[0_0_15px_rgba(37,99,235,0.4)]"
+                      style={{ width: `${(batchStatus.current / batchStatus.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm font-black text-blue-600 animate-pulse">{batchStatus.currentName}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-8 max-h-[300px] overflow-y-auto bg-white custom-scrollbar">
+              <div className="space-y-3">
+                {batchStatus.log.map((entry, idx) => (
+                  <div key={idx} className="flex items-center gap-3 text-xs font-bold text-gray-600 animate-in slide-in-from-bottom-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                    {entry}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {batchStatus.isFinished && (
+              <div className="p-8 bg-gray-50">
+                <button 
+                  onClick={() => setBatchStatus(prev => ({ ...prev, isActive: false }))} 
+                  className="w-full bg-gray-900 hover:bg-black text-white py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-xl transition-all active:scale-95"
+                >
+                  Return to Dashboard
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-[2.5rem] p-10 shadow-2xl shadow-gray-200 border border-gray-100 flex flex-col lg:flex-row justify-between items-center gap-8">
         <div>
           <h2 className="text-4xl font-black text-gray-900 tracking-tight">Admin Governance</h2>
@@ -114,8 +253,8 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
           </div>
         </div>
         <div className="flex flex-wrap gap-4 justify-center">
-           <button onClick={handleGlobalReminders} disabled={!!isProcessing || missingTeachers.length === 0} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl disabled:opacity-50 transition-all">Send Batch Reminders</button>
-           <button onClick={handleGlobalEmailCompilation} disabled={!!isProcessing} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl disabled:opacity-50 transition-all">Batch Mail Reports</button>
+           <button onClick={handleGlobalReminders} disabled={batchStatus.isActive || missingTeachers.length === 0} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl disabled:opacity-50 transition-all">Send Batch Reminders</button>
+           <button onClick={handleGlobalEmailCompilation} disabled={batchStatus.isActive} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl disabled:opacity-50 transition-all">Batch Mail Reports</button>
            <button onClick={() => setActiveTab('settings')} className="bg-gray-900 hover:bg-black text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl transition-all active:scale-95">
              <i className="fas fa-sliders mr-2"></i> Cloud Setup
            </button>
