@@ -44,8 +44,6 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
         try {
           const success = await onSyncRegistry(syncUrl);
           if (success) {
-            // Need to reload or re-search the updated registry from local storage directly
-            // since the prop 'teachers' might not update instantly in this closure.
             const freshRegistry = JSON.parse(localStorage.getItem('sh_teachers_v4') || '[]');
             const freshTeacher = freshRegistry.find((t: any) => t.email.toLowerCase() === cleanEmail);
             
@@ -153,10 +151,6 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
               </>
             )}
           </button>
-
-          <p className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">
-            New devices are automatically verified <br/> via the school database.
-          </p>
         </form>
       </div>
     </div>

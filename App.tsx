@@ -52,7 +52,6 @@ const App: React.FC = () => {
           }
         }
 
-        // Silent background sync
         if (activeSyncUrl && activeSyncUrl.startsWith('http')) {
           fetchRegistryFromCloud(activeSyncUrl);
         }
@@ -70,7 +69,6 @@ const App: React.FC = () => {
     const url = syncUrlRef.current || syncUrl;
     if (!url || !url.startsWith('http')) return;
     try {
-      // Use text/plain and mode: no-cors to avoid CORS preflight issues
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
@@ -85,8 +83,6 @@ const App: React.FC = () => {
   const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
     if (!url || !url.startsWith('http')) return false;
     try {
-      // Use GET for fetching to avoid CORS 'Failed to fetch' issues on GAS.
-      // This hits the doGet(e) function in your Apps Script.
       const response = await fetch(url); 
       const data = await response.json();
       if (data.result === 'success' && data.teachers) {
@@ -256,9 +252,9 @@ const App: React.FC = () => {
           <div className="w-12 h-12 mx-auto grayscale opacity-30 flex items-center justify-center">
              <i className="fas fa-school text-3xl"></i>
           </div>
-          <div>
-            <p className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-[0.3em]">Designed and developed by ASHUTOSH KUMAR GAUTAM</p>
-            <p className="text-[10px] text-gray-300 font-bold mt-1">{SCHOOL_NAME}, Jhumri Telaiya</p>
+          <div className="space-y-2">
+            <p className="text-[12px] md:text-sm font-black text-gray-900 uppercase tracking-[0.2em]">Designed and developed by ASHUTOSH KUMAR GAUTAM</p>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-80">{SCHOOL_NAME}, Jhumri Telaiya</p>
           </div>
         </div>
       </footer>
