@@ -1,11 +1,12 @@
 
 /**
- * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v4.0)
+ * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v4.1)
  * 
  * IMPORTANT:
  * 1. Paste this entire code into your Google Apps Script editor.
  * 2. Save the project.
- * 3. Run the function 'setupTriggers' ONCE manually from the toolbar to activate automation.
+ * 3. Run the function 'setupTriggers' ONCE manually from the toolbar.
+ *    -> This will NOW automatically create the required Sheets ('Registry', 'Submissions') if they don't exist.
  * 4. Deploy as Web App -> Execute as: Me -> Who can access: Anyone.
  */
 
@@ -48,25 +49,30 @@ function doGet(e) {
 // ==========================================
 
 function setupTriggers() {
-  // Clear existing triggers to prevent duplicates
+  // 1. Initialize Sheets immediately so user sees them
+  ensureEnvironment();
+
+  // 2. Clear existing triggers to prevent duplicates
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
     ScriptApp.deleteTrigger(triggers[i]);
   }
 
-  // 1. Warning Emails: Run daily at 2 PM (Logic inside function filters for Thu/Fri/Sat)
+  // 3. Warning Emails: Run daily at 2 PM (Logic inside function filters for Thu/Fri/Sat)
   ScriptApp.newTrigger('autoCheckAndSendWarnings')
       .timeBased()
       .everyDays(1)
       .atHour(14)
       .create();
 
-  // 2. Compilation Emails: Run every Saturday at 9 PM
+  // 4. Compilation Emails: Run every Saturday at 9 PM
   ScriptApp.newTrigger('autoSendCompilations')
       .timeBased()
       .onWeekDay(ScriptApp.WeekDay.SATURDAY)
       .atHour(21)
       .create();
+      
+  console.log("Triggers setup complete. Sheets checked/created.");
 }
 
 function getNextMondayDate() {
@@ -131,7 +137,7 @@ function sendWarningEmail(name, email, weekStarting) {
       "<p>The syllabus plan for the upcoming week commencing <b>" + weekStarting + "</b> is pending submission. Please ensure you update the registry by end of day today to facilitate the weekly compilation process.</p>" +
       "<p style='text-align: center;'><a href='" + PORTAL_URL + "' style='background: #d32f2f; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Submit Now</a></p>" +
       "<br><p>Best Regards,</p>" +
-      "<p><b>Academic Automation System</b><br>Sacred Heart School</p>" +
+      "<p><b>Coordinator</b><br>Sacred Heart School</p>" +
       "</div>";
 
     GmailApp.sendEmail(email, subject, "", {
@@ -197,11 +203,13 @@ function autoSendCompilations() {
         if (classPlans.length > 0) {
           // 1. Generate PDF
           var pdfBlob = createSyllabusPDF(targetClass, targetSection, weekRange, teacherName, classPlans);
+          // Requirement: Attachment pdf name should be like Class_Sec_Weekdate
           var fileName = "Class_" + targetClass + "_" + targetSection + "_" + nextWeekMonday + ".pdf";
           pdfBlob.setName(fileName);
           
           // 2. Save to Drive
           var file = folder.createFile(pdfBlob);
+          // Requirement: make changes to store pdf on google drive along with link of the pdf in the attachment
           var fileUrl = file.getUrl();
           
           // 3. Send Email
@@ -259,6 +267,7 @@ function createSyllabusPDF(cls, sec, weekRange, teacherName, plans) {
 }
 
 function sendFormalCompilationEmail(name, email, cls, sec, weekRange, driveLink, pdfBlob, fileName) {
+  // Requirement: formal message
   var subject = "[OFFICIAL] Compiled Weekly Syllabus: Class " + cls + "-" + sec;
   
   var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #eee;'>" +
@@ -367,7 +376,7 @@ function handlePlanSubmission(data) {
     htmlBody += uniqueSubjects.join("") + "</ul>" +
       "<p>This is an automated confirmation. You can view your submission history in the portal.</p>" +
       "<br><p>Best Regards,</p>" +
-      "<p><b>Academic Administration</b><br>Sacred Heart School</p>" +
+      "<p><b>Coordinator</b><br>Sacred Heart School</p>" +
       "</div>";
 
     GmailApp.sendEmail(data.teacherEmail, subject, "", {
