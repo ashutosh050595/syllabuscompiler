@@ -128,9 +128,11 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'SEND_WARNINGS', defaulters, weekStarting: week, portalLink: PORTAL_LINK })
       });
-      alert(`Success: Reminders sent.`);
+      // Removed alert to prevent blocking batch processes
+      return true;
     } catch (err) {
-      alert("Error reaching cloud.");
+      console.error("Email warning error:", err);
+      return false;
     }
   };
 
@@ -144,9 +146,10 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'SEND_COMPILED_PDF', pdfBase64, recipient, className, filename, weekStarting: getNextWeekMonday() })
       });
-      alert(`Success: Report emailed.`);
+      // Removed alert to prevent blocking batch processes
       return true;
     } catch (err) {
+      console.error("PDF delivery error:", err);
       return false;
     }
   };
