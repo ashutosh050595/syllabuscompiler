@@ -10,41 +10,53 @@ export const generateSyllabusPDF = (
   dateFrom: string,
   dateTo: string
 ) => {
-  const doc = new jsPDF();
+  // Requirement 5: Change layout from portrait to landscape
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4'
+  });
+  
   const pageWidth = doc.internal.pageSize.getWidth();
 
+  // Requirement 2: Logo to be place at the top left corner
   try {
-    doc.addImage(SCHOOL_LOGO_URL, 'PNG', pageWidth / 2 - 15, 8, 30, 30);
+    doc.addImage(SCHOOL_LOGO_URL, 'PNG', 15, 10, 25, 25);
   } catch (e) {
     console.warn("Logo failed to load for PDF");
   }
 
   // Header Section
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
+  // Requirement 1: Font style for School Name (Using Times Bold for formal traditional look)
+  doc.setFontSize(26);
+  doc.setFont('times', 'bold');
   doc.setTextColor(0, 51, 153); // School Blue
-  doc.text(SCHOOL_NAME, pageWidth / 2, 45, { align: 'center' });
+  doc.text(SCHOOL_NAME, pageWidth / 2 + 10, 25, { align: 'center' });
   
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 100, 100);
-  doc.text(SCHOOL_SUBTITLE, pageWidth / 2, 50, { align: 'center' });
+  doc.text(SCHOOL_SUBTITLE, pageWidth / 2 + 10, 31, { align: 'center' });
 
-  doc.setFontSize(12);
+  // Requirement 3: Title - Weekly Syllabus
+  doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(40, 40, 40);
-  doc.text('WEEKLY SYLLABUS COMPILATION', pageWidth / 2, 60, { align: 'center' });
+  doc.text('WEEKLY SYLLABUS', pageWidth / 2 + 10, 42, { align: 'center' });
 
   // Details Bar
-  doc.setDrawColor(230, 230, 230);
-  doc.line(15, 65, pageWidth - 15, 65);
+  doc.setDrawColor(200, 200, 200);
+  doc.line(15, 48, pageWidth - 15, 48);
 
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text(`Week Beginning: ${dateFrom}`, 15, 72);
-  doc.text(`Ending On: ${dateTo}`, 120, 72);
-  doc.text(`Class: ${classTeacher.classLevel} - ${classTeacher.section}`, 15, 78);
-  doc.text(`In-Charge: ${classTeacher.name}`, 120, 78);
+  doc.setTextColor(60, 60, 60);
+  doc.text(`Week Beginning: ${dateFrom}`, 15, 55);
+  doc.text(`Ending On: ${dateTo}`, 100, 55);
+  doc.text(`Class: ${classTeacher.classLevel} - ${classTeacher.section}`, 180, 55);
+  
+  // Requirement 4: In place of In-Charge, write Class Teacher
+  doc.text(`Class Teacher: ${classTeacher.name}`, 15, 61);
 
   // Table Data Preparation
   const tableData = submissions.map(sub => [
@@ -56,15 +68,16 @@ export const generateSyllabusPDF = (
   ]);
 
   (doc as any).autoTable({
-    startY: 85,
+    startY: 68,
     head: [['SUBJECT', 'FACULTY', 'CHAPTER', 'PLANNED TOPICS', 'HOMEWORK']],
     body: tableData,
+    margin: { left: 15, right: 15 },
     styles: {
-      fontSize: 8,
-      cellPadding: 5,
+      fontSize: 9,
+      cellPadding: 4,
       lineColor: [220, 220, 220],
       lineWidth: 0.1,
-      valign: 'middle'
+      valign: 'top'
     },
     headStyles: {
       fillColor: [0, 51, 153], // Sacred Heart Blue
@@ -73,16 +86,16 @@ export const generateSyllabusPDF = (
       halign: 'center',
     },
     columnStyles: {
-      0: { cellWidth: 25, fontStyle: 'bold' },
-      1: { cellWidth: 25 },
-      2: { cellWidth: 35 },
-      3: { cellWidth: 65 },
-      4: { cellWidth: 35 },
+      0: { cellWidth: 30, fontStyle: 'bold' },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 45 },
+      3: { cellWidth: 100 },
+      4: { cellWidth: 57 },
     },
     theme: 'grid',
     didDrawPage: (data: any) => {
       const footerY = doc.internal.pageSize.getHeight() - 10;
-      doc.setFontSize(7);
+      doc.setFontSize(8);
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(150, 150, 150);
       doc.text('Sacred Heart School Automation - Academic Management System', 15, footerY);
