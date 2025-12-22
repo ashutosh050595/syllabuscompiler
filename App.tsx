@@ -44,7 +44,7 @@ const App: React.FC = () => {
       const data = await response.json();
       
       if (data.result === 'success') {
-        // Case 1: Cloud has data
+        // Case 1: Teachers Data
         if (data.teachers && Array.isArray(data.teachers) && data.teachers.length > 0) {
           setTeachers(data.teachers);
           teachersRef.current = data.teachers;
@@ -61,6 +61,13 @@ const App: React.FC = () => {
           setTeachers(INITIAL_TEACHERS);
           teachersRef.current = INITIAL_TEACHERS;
         }
+
+        // Case 3: Requests Data
+        if (data.requests && Array.isArray(data.requests)) {
+          setResubmitRequests(data.requests);
+          localStorage.setItem('sh_resubmit_requests', JSON.stringify(data.requests));
+        }
+
         return true;
       }
       return false;
@@ -145,22 +152,25 @@ const App: React.FC = () => {
     const request = resubmitRequests.find(r => r.id === requestId);
     if (!request) return;
 
-    // 1. Delete previous response
+    // 1. Delete previous response locally
     const filteredSubmissions = submissions.filter(s => 
       !(s.teacherId === request.teacherId && s.weekStarting === request.weekStarting)
     );
     setSubmissions(filteredSubmissions);
     localStorage.setItem('sh_submissions_v2', JSON.stringify(filteredSubmissions));
 
-    // 2. Remove request
-    const filteredRequests = resubmitRequests.filter(r => r.id !== requestId);
-    setResubmitRequests(filteredRequests);
-    localStorage.setItem('sh_resubmit_requests', JSON.stringify(filteredRequests));
+    // 2. Update request status locally
+    const updatedRequests = resubmitRequests.map(r => 
+      r.id === requestId ? { ...r, status: 'approved' as const } : r
+    );
+    setResubmitRequests(updatedRequests);
+    localStorage.setItem('sh_resubmit_requests', JSON.stringify(updatedRequests));
 
     // 3. Update Cloud & Send Confirmation Mail
     if (syncUrlRef.current) {
       await cloudPost(syncUrlRef.current, { 
         action: 'APPROVE_RESUBMIT', 
+        requestId: request.id,
         teacherEmail: request.teacherEmail,
         teacherName: request.teacherName,
         weekStarting: request.weekStarting 

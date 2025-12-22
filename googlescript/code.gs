@@ -1,18 +1,19 @@
 
 /**
- * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v4.1)
+ * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v4.2)
  * 
  * IMPORTANT:
  * 1. Paste this entire code into your Google Apps Script editor.
  * 2. Save the project.
  * 3. Run the function 'setupTriggers' ONCE manually from the toolbar.
- *    -> This will NOW automatically create the required Sheets ('Registry', 'Submissions') if they don't exist.
+ *    -> This will create the 'Requests' sheet and fix the missing data issue.
  * 4. Deploy as Web App -> Execute as: Me -> Who can access: Anyone.
  */
 
 const ROOT_FOLDER_NAME = "Sacred Heart Syllabus Reports";
 const SUBMISSIONS_SHEET = "Submissions";
 const REGISTRY_SHEET = "Registry";
+const REQUESTS_SHEET = "Requests";
 const PORTAL_URL = "https://syllabuscompiler-ruddy.vercel.app/";
 
 function doPost(e) {
@@ -293,10 +294,14 @@ function sendFormalCompilationEmail(name, email, cls, sec, weekRange, driveLink,
 // ==========================================
 
 function handleGetRegistry() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(REGISTRY_SHEET);
-  if (!sheet) return jsonResponse("error", "Registry not found");
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var regSheet = ss.getSheetByName(REGISTRY_SHEET);
+  var reqSheet = ss.getSheetByName(REQUESTS_SHEET);
+
+  if (!regSheet) return jsonResponse("error", "Registry not found");
   
-  var data = sheet.getDataRange().getValues();
+  // Teachers
+  var data = regSheet.getDataRange().getValues();
   var teachers = [];
   for (var i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
@@ -309,7 +314,32 @@ function handleGetRegistry() {
       isClassTeacher: data[i][5] ? JSON.parse(data[i][5]) : undefined
     });
   }
-  return jsonResponse("success", { teachers: teachers });
+
+  // Requests
+  var requests = [];
+  if (reqSheet) {
+    var reqData = reqSheet.getDataRange().getValues();
+    for (var i = 1; i < reqData.length; i++) {
+      if (!reqData[i][0]) continue;
+      
+      var week = reqData[i][4];
+      if (week instanceof Date) {
+        week = Utilities.formatDate(week, Session.getScriptTimeZone(), "yyyy-MM-dd");
+      }
+      
+      requests.push({
+        id: reqData[i][0],
+        teacherId: reqData[i][1],
+        teacherName: reqData[i][2],
+        teacherEmail: reqData[i][3],
+        weekStarting: week,
+        timestamp: reqData[i][5],
+        status: reqData[i][6]
+      });
+    }
+  }
+
+  return jsonResponse("success", { teachers: teachers, requests: requests });
 }
 
 function ensureEnvironment() {
@@ -324,6 +354,11 @@ function ensureEnvironment() {
     var reg = ss.insertSheet(REGISTRY_SHEET);
     var regHeaders = ["Teacher ID", "Name", "Email", "WhatsApp", "Assignments JSON", "Class Teacher Info JSON"];
     reg.getRange(1, 1, 1, regHeaders.length).setValues([regHeaders]).setBackground("#333333").setFontColor("#FFFFFF");
+  }
+  if (!ss.getSheetByName(REQUESTS_SHEET)) {
+    var reqSheet = ss.insertSheet(REQUESTS_SHEET);
+    var reqHeaders = ["ID", "Teacher ID", "Name", "Email", "Week Starting", "Timestamp", "Status"];
+    reqSheet.getRange(1, 1, 1, reqHeaders.length).setValues([reqHeaders]).setBackground("#FF9800").setFontColor("#FFFFFF");
   }
 }
 
@@ -391,10 +426,40 @@ function handlePlanSubmission(data) {
 }
 
 function handleResubmitRequest(data) {
-  return jsonResponse("success", "Request Logged");
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(REQUESTS_SHEET);
+  // data contains: id, teacherId, teacherName, teacherEmail, weekStarting, timestamp, status
+  sheet.appendRow([data.id, data.teacherId, data.teacherName, data.teacherEmail, data.weekStarting, data.timestamp, data.status]);
+  return jsonResponse("success", "Request Logged in Cloud");
 }
 
 function handleResubmitApproval(data) {
+  // 1. Mark as Approved in Requests Sheet
+  var reqSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(REQUESTS_SHEET);
+  if (reqSheet) {
+    var reqRows = reqSheet.getDataRange().getValues();
+    // Locate the request. We look for ID (col 0) if provided, or fallback to email+week.
+    // data.requestId is sent from frontend now (we will ensure it).
+    for (var i = 1; i < reqRows.length; i++) {
+      var rowId = reqRows[i][0];
+      var rowEmail = reqRows[i][3];
+      var rowWeek = reqRows[i][4];
+      if (rowWeek instanceof Date) rowWeek = Utilities.formatDate(rowWeek, Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+      var match = false;
+      if (data.requestId && rowId === data.requestId) {
+        match = true;
+      } else if (rowEmail === data.teacherEmail && rowWeek === data.weekStarting && reqRows[i][6] === 'pending') {
+        match = true;
+      }
+
+      if (match) {
+        reqSheet.getRange(i + 1, 7).setValue('approved'); // Column 7 is Status
+        break; // Stop after first match
+      }
+    }
+  }
+
+  // 2. Send Email
   var subject = "Permission Granted: Weekly Syllabus Resubmission - " + data.weekStarting;
   var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
     "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
@@ -411,15 +476,20 @@ function handleResubmitApproval(data) {
     htmlBody: htmlBody
   });
   
+  // 3. Clear Submission
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SUBMISSIONS_SHEET);
   var rows = sheet.getDataRange().getValues();
+  // Iterate backwards to safely delete
   for (var i = rows.length - 1; i >= 1; i--) {
-    if (rows[i][1] === data.weekStarting && rows[i][3].toLowerCase() === data.teacherEmail.toLowerCase()) {
+    var rowWeek = rows[i][1];
+    if (rowWeek instanceof Date) rowWeek = Utilities.formatDate(rowWeek, Session.getScriptTimeZone(), "yyyy-MM-dd");
+    
+    if (rowWeek === data.weekStarting && rows[i][3].toLowerCase() === data.teacherEmail.toLowerCase()) {
       sheet.deleteRow(i + 1);
     }
   }
 
-  return jsonResponse("success", "Approval Sent & Data Cleared");
+  return jsonResponse("success", "Approval Sent, Request Updated, Data Cleared");
 }
 
 function handleWarningEmails(data) {
