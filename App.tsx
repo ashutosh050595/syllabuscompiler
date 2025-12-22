@@ -65,19 +65,36 @@ const App: React.FC = () => {
     initialize();
   }, []);
 
-  const syncRegistryToCloud = async (currentTeachers: Teacher[]) => {
-    const url = syncUrlRef.current || syncUrl;
-    if (!url || !url.startsWith('http')) return;
+  /**
+   * Helper function to perform robust POST requests to Google Apps Script.
+   * GAS does not support Preflight (OPTIONS) requests well, so we use
+   * 'text/plain' to keep it a "Simple Request" while sending JSON.
+   */
+  const cloudPost = async (url: string, payload: any) => {
+    if (!url || !url.startsWith('http')) return false;
     try {
-      await fetch(url, {
+      // Using standard CORS mode with simple content-type to ensure mobile compatibility
+      const response = await fetch(url, {
         method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'SYNC_REGISTRY', teachers: currentTeachers })
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        redirect: 'follow'
       });
+      
+      // Even if we get a CORS error on the response reading side, 
+      // the fact that fetch didn't throw means the request was successfully sent.
+      return response.ok || response.type === 'opaque' || response.status === 0;
     } catch (err) {
-      console.error("Cloud Registry Sync Failed", err);
+      console.error("Cloud Post Error:", err);
+      return false;
     }
+  };
+
+  const syncRegistryToCloud = async (currentTeachers: Teacher[]) => {
+    return await cloudPost(syncUrlRef.current || syncUrl, { 
+      action: 'SYNC_REGISTRY', 
+      teachers: currentTeachers 
+    });
   };
 
   const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
@@ -128,52 +145,29 @@ const App: React.FC = () => {
 
     const latestSub = newSubs[newSubs.length - 1];
     if (syncUrlRef.current && latestSub && syncUrlRef.current.startsWith('http')) {
-      try {
-        await fetch(syncUrlRef.current, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ ...latestSub, action: 'SUBMIT_PLAN' })
-        });
-      } catch (err) {
-        console.error("Sync failed:", err);
-      }
+      await cloudPost(syncUrlRef.current, { ...latestSub, action: 'SUBMIT_PLAN' });
     }
   };
 
   const triggerWarningEmails = async (defaulters: { name: string, email: string }[], weekStarting?: string) => {
-    const url = syncUrlRef.current || syncUrl;
-    if (!url || !url.startsWith('http')) return false;
     const week = weekStarting || getNextWeekMonday();
-    try {
-      await fetch(url, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'SEND_WARNINGS', defaulters, weekStarting: week, portalLink: PORTAL_LINK })
-      });
-      return true;
-    } catch (err) {
-      console.error("Email warning error:", err);
-      return false;
-    }
+    return await cloudPost(syncUrlRef.current || syncUrl, { 
+      action: 'SEND_WARNINGS', 
+      defaulters, 
+      weekStarting: week, 
+      portalLink: PORTAL_LINK 
+    });
   };
 
   const triggerCompiledPdfEmail = async (pdfBase64: string, recipient: string, className: string, filename: string) => {
-    const url = syncUrlRef.current || syncUrl;
-    if (!url || !url.startsWith('http')) return false;
-    try {
-      await fetch(url, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'SEND_COMPILED_PDF', pdfBase64, recipient, className, filename, weekStarting: getNextWeekMonday() })
-      });
-      return true;
-    } catch (err) {
-      console.error("PDF delivery error:", err);
-      return false;
-    }
+    return await cloudPost(syncUrlRef.current || syncUrl, { 
+      action: 'SEND_COMPILED_PDF', 
+      pdfBase64, 
+      recipient, 
+      className, 
+      filename, 
+      weekStarting: getNextWeekMonday() 
+    });
   };
 
   if (isInitializing) {
