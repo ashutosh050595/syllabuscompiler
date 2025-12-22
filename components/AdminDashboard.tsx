@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Teacher, WeeklySubmission, ClassLevel, Section, Submission, AssignedClass } from '../types';
-import { getNextWeekMonday, PORTAL_LINK, getWhatsAppLink, ALL_CLASSES, ALL_SECTIONS } from '../constants';
+import { getNextWeekMonday, getWhatsAppLink, ALL_CLASSES, ALL_SECTIONS, SCHOOL_NAME } from '../constants';
 import { generateSyllabusPDF } from '../services/pdfService';
 
 interface Props {
@@ -25,11 +25,14 @@ interface BatchStatus {
   log: string[];
 }
 
-const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, syncUrl, setSyncUrl, onSendWarnings, onSendPdf }) => {
+const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, syncUrl, onSendWarnings, onSendPdf }) => {
   const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'archive'>('monitor');
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const nextWeek = getNextWeekMonday();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Partial<Teacher> | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState(false);
+  const [outlineCopyFeedback, setOutlineCopyFeedback] = useState(false);
   
   const [batchStatus, setBatchStatus] = useState<BatchStatus>({
     isActive: false,
@@ -42,6 +45,24 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
   });
 
   const [tempAssignment, setTempAssignment] = useState<AssignedClass>({ classLevel: 'I', section: 'A', subject: '' });
+
+  const appOutlineText = `🚀 ${SCHOOL_NAME} - SYLLABUS MANAGER V2\n\n` +
+    `A professional academic automation system designed for precision and efficiency.\n\n` +
+    `✨ CORE FEATURES:\n` +
+    `• Role-Based Dashboards: Secure access for Faculty & Administrators.\n` +
+    `• AI Polishing: Gemini-powered refinement for professional lesson plans.\n` +
+    `• Auto-PDF Compilation: One-click Landscape PDF generation for Class Teachers.\n` +
+    `• Cloud Governance: Real-time sync with Google Sheets (No data loss).\n` +
+    `• Communication Suite: Automated WhatsApp & Email notifications.\n` +
+    `• Batch Processing: Send school-wide reminders or reports in seconds.\n\n` +
+    `Developed to uphold the academic excellence of Sacred Heart School.`;
+
+  const handleCopyAppOutline = () => {
+    navigator.clipboard.writeText(appOutlineText).then(() => {
+      setOutlineCopyFeedback(true);
+      setTimeout(() => setOutlineCopyFeedback(false), 2000);
+    });
+  };
 
   const missingTeachers = useMemo(() => {
     const submittedIds = new Set(submissions.filter(s => s.weekStarting === nextWeek).map(s => s.teacherId));
@@ -59,6 +80,21 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
     });
     return res;
   }, [missingTeachers]);
+
+  const handleCopyOutline = () => {
+    const outline = teachers.map(t => {
+      const ctInfo = t.isClassTeacher ? `(Class Teacher: ${t.isClassTeacher.classLevel}-${t.isClassTeacher.section})` : '';
+      const assignments = t.assignedClasses.map(ac => `${ac.classLevel}-${ac.section}: ${ac.subject}`).join(', ');
+      return `Name: ${t.name}\nEmail: ${t.email}\nWhatsApp: ${t.whatsapp || 'N/A'}\nStatus: ${ctInfo || 'Subject Teacher'}\nAssignments: ${assignments}\n`;
+    }).join('\n---------------------------\n\n');
+
+    const fullText = `SACRED HEART FACULTY REGISTRY OUTLINE\n====================================\n\n${outline}`;
+    
+    navigator.clipboard.writeText(fullText).then(() => {
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2000);
+    });
+  };
 
   const handleGlobalReminders = async () => {
     if (missingTeachers.length === 0) return;
@@ -226,7 +262,12 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
       {/* Admin Header */}
       <div className="bg-white rounded-[2.5rem] p-10 shadow-2xl border border-gray-100 flex flex-col lg:flex-row justify-between items-center gap-8">
         <div>
-          <h2 className="text-4xl font-black text-gray-900 tracking-tight">Admin Governance</h2>
+          <div className="flex items-center gap-4">
+             <h2 className="text-4xl font-black text-gray-900 tracking-tight">Admin Governance</h2>
+             <button onClick={() => setShowInfoModal(true)} className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                <i className="fas fa-info-circle"></i>
+             </button>
+          </div>
           <div className="flex items-center gap-3 mt-2">
              <span className={`w-3 h-3 rounded-full ${syncUrl ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`}></span>
              <p className="text-gray-400 font-bold uppercase tracking-[0.2em] text-[10px]">{syncUrl ? 'Cloud Automations Active' : 'Local Mode'}</p>
@@ -276,9 +317,17 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
 
           {activeTab === 'registry' && (
             <div className="space-y-10">
-               <div className="flex justify-between items-center">
+               <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-2xl font-black text-gray-800 tracking-tight">Faculty Registry</h3>
-                  <button onClick={() => { setEditing({ assignedClasses: [] }); setShowModal(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl">Add New Faculty</button>
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={handleCopyOutline}
+                      className={`px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 ${copyFeedback ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                      {copyFeedback ? <><i className="fas fa-check"></i> Outline Copied</> : <><i className="fas fa-copy"></i> Copy Outline</>}
+                    </button>
+                    <button onClick={() => { setEditing({ assignedClasses: [] }); setShowModal(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl transition-all">Add New Faculty</button>
+                  </div>
                </div>
                <div className="overflow-x-auto">
                  <table className="w-full text-left border-separate border-spacing-y-4">
@@ -329,6 +378,32 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
           )}
         </div>
       </div>
+
+      {/* Info / Outline Modal */}
+      {showInfoModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-gray-900/60 backdrop-blur-md">
+           <div className="bg-white rounded-[4rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+             <div className="bg-blue-600 p-10 text-white flex justify-between items-center">
+               <div>
+                  <h3 className="text-2xl font-black uppercase tracking-widest">System Outline</h3>
+                  <p className="text-blue-100 text-[10px] font-bold mt-1 uppercase tracking-widest">Platform capabilities & Sharing</p>
+               </div>
+               <button onClick={() => setShowInfoModal(false)} className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-all flex items-center justify-center"><i className="fas fa-times"></i></button>
+             </div>
+             <div className="p-10 space-y-8">
+                <div className="bg-gray-50 p-8 rounded-[2.5rem] border border-gray-100">
+                   <pre className="text-[11px] font-medium text-gray-600 whitespace-pre-wrap leading-relaxed">{appOutlineText}</pre>
+                </div>
+                <button 
+                  onClick={handleCopyAppOutline}
+                  className={`w-full py-6 rounded-3xl font-black uppercase text-xs tracking-widest transition-all shadow-xl flex items-center justify-center gap-3 ${outlineCopyFeedback ? 'bg-emerald-600 text-white' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                >
+                   {outlineCopyFeedback ? <><i className="fas fa-check"></i> Outline Copied to Clipboard</> : <><i className="fas fa-copy"></i> Copy Professional Outline</>}
+                </button>
+             </div>
+           </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-gray-900/60 backdrop-blur-md overflow-y-auto">
