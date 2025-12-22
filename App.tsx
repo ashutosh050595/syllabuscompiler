@@ -14,7 +14,6 @@ const App: React.FC = () => {
   const [syncUrl, setSyncUrl] = useState<string>('');
   const [logoLoaded, setLogoLoaded] = useState(true);
   
-  // Refs to avoid stale closures in scheduler and async handlers
   const teachersRef = useRef<Teacher[]>([]);
   const submissionsRef = useRef<WeeklySubmission[]>([]);
   const syncUrlRef = useRef<string>('');
@@ -64,7 +63,6 @@ const App: React.FC = () => {
     const dateStr = now.toISOString().split('T')[0];
     const nextMonday = getNextWeekMonday();
 
-    // Auto-reminders run on Thursday, Friday, Saturday at 2 PM for the upcoming week
     if ([4, 5, 6].includes(day) && hour === 14) {
       const runKey = `auto_remind_${dateStr}`;
       if (!localStorage.getItem(runKey) && syncUrlRef.current) {
@@ -201,9 +199,12 @@ const App: React.FC = () => {
 
   const triggerCompiledPdfEmail = async (pdfBase64: string, recipient: string, className: string, filename: string, isAuto = false) => {
     const url = syncUrlRef.current;
-    if (!url) return;
+    if (!url) {
+      if (!isAuto) alert("Cloud Sync not configured.");
+      return;
+    }
     try {
-      await fetch(url, {
+      const response = await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
@@ -217,9 +218,11 @@ const App: React.FC = () => {
           weekStarting: getNextWeekMonday()
         })
       });
-      if (!isAuto) alert(`Success: Compiled PDF emailed to ${recipient}`);
+      if (!isAuto) alert(`Success: Request sent to cloud for ${recipient}. Please check email in 1-2 mins.`);
+      return true;
     } catch (err) {
-      if (!isAuto) console.error("Email dispatch failed for", recipient);
+      if (!isAuto) alert("Mobile sync error: Failed to reach server. Please try on PC or check internet.");
+      return false;
     }
   };
 

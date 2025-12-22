@@ -12,7 +12,7 @@ interface Props {
   syncUrl: string;
   setSyncUrl: (url: string) => void;
   onSendWarnings: (defaulters: {name: string, email: string}[], weekStarting: string) => void;
-  onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => void;
+  onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => Promise<any>;
 }
 
 const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, syncUrl, setSyncUrl, onSendWarnings, onSendPdf }) => {
@@ -87,7 +87,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
     alert(`Batch Operation Complete: ${sentCount} compiled plans emailed to Class Teachers.`);
   };
 
-  const handleManualCompiledPDF = (classLevel: ClassLevel, section: Section, emailMode: boolean = false) => {
+  const handleManualCompiledPDF = async (classLevel: ClassLevel, section: Section, emailMode: boolean = false) => {
     const relevantSubmissions = submissions.filter(s => s.weekStarting === nextWeek).flatMap(s => 
       s.plans.filter(p => p.classLevel === classLevel && p.section === section).map(p => ({
         ...p,
@@ -104,10 +104,23 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
     
     if (emailMode) {
       const pdfBase64 = doc.output('datauristring');
-      onSendPdf(pdfBase64, ADMIN_EMAIL, `${classLevel}-${section}`, `AdminCompiled_${classLevel}${section}.pdf`);
+      const processId = `email-${classLevel}-${section}`;
+      setIsProcessing(processId);
+      await onSendPdf(pdfBase64, ADMIN_EMAIL, `${classLevel}-${section}`, `AdminCompiled_${classLevel}${section}.pdf`);
+      setIsProcessing(null);
     } else {
       doc.save(`Compiled_${classLevel}${section}_${nextWeek}.pdf`);
     }
+  };
+
+  const sendWhatsAppNudge = (teacher: Teacher, classKey: string) => {
+    if (!teacher.whatsapp) {
+      alert("WhatsApp number not registered.");
+      return;
+    }
+    const message = `Hi ${teacher.name}, this is a reminder that your lesson plan for Class ${classKey} is pending for the week starting ${nextWeek}. Please submit it as soon as possible on the portal.`;
+    const url = `https://wa.me/${teacher.whatsapp.startsWith('+') ? teacher.whatsapp.substring(1) : teacher.whatsapp}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -124,22 +137,22 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
            <button 
             onClick={handleGlobalReminders} 
             disabled={!!isProcessing || missingTeachers.length === 0}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-xs shadow-xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-95 disabled:opacity-50"
            >
              {isProcessing === 'reminders' ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-bell"></i>}
-             <span>Send Reminders (Next Week)</span>
+             <span>Send All Email Reminders</span>
            </button>
            <button 
             onClick={handleGlobalEmailCompilation}
             disabled={!!isProcessing}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-black text-xs shadow-xl shadow-indigo-100 flex items-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl shadow-indigo-100 flex items-center gap-3 transition-all active:scale-95 disabled:opacity-50"
            >
              {isProcessing === 'emails' ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-paper-plane"></i>}
-             <span>Email Compiled Plans</span>
+             <span>Batch Mail Compiled Plans</span>
            </button>
-           <button onClick={() => setActiveTab('settings')} className="bg-gray-900 hover:bg-black text-white px-8 py-4 rounded-2xl font-black text-xs shadow-xl flex items-center gap-3 transition-all active:scale-95">
+           <button onClick={() => setActiveTab('settings')} className="bg-gray-900 hover:bg-black text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl flex items-center gap-3 transition-all active:scale-95">
              <i className="fas fa-sliders"></i>
-             <span>Integrations</span>
+             <span>Cloud Integrations</span>
            </button>
         </div>
       </div>
@@ -180,20 +193,33 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                       {list.map(t => (
                         <div key={t.id} className="flex items-center justify-between group/row">
                           <span className="text-xs font-bold text-gray-600">{t.name}</span>
-                          <button 
-                            onClick={() => onSendWarnings([{name: t.name, email: t.email}], nextWeek)} 
-                            className="text-[8px] font-black text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-3 py-1 rounded-lg uppercase tracking-widest transition-all"
-                          >
-                            Warn
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                             <button 
+                              onClick={() => sendWhatsAppNudge(t, cls)}
+                              className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                             >
+                              <i className="fab fa-whatsapp"></i>
+                             </button>
+                             <button 
+                              onClick={() => onSendWarnings([{name: t.name, email: t.email}], nextWeek)} 
+                              className="text-[8px] font-black text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded-lg uppercase tracking-widest transition-all"
+                             >
+                              Mail
+                             </button>
+                          </div>
                         </div>
                       ))}
                     </div>
                     <div className="grid grid-cols-2 gap-3 pt-6 border-t border-gray-50">
-                      <button onClick={() => { const [cl, sec] = cls.split('-') as [any, any]; handleManualCompiledPDF(cl, sec, true); }} className="py-4 bg-indigo-50 text-indigo-600 rounded-2xl text-[9px] font-black hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2">
-                        <i className="fas fa-envelope"></i> Mail PDF
+                      <button 
+                        onClick={() => { const [cl, sec] = cls.split('-') as [any, any]; handleManualCompiledPDF(cl, sec, true); }} 
+                        disabled={!!isProcessing}
+                        className="py-5 bg-indigo-50 text-indigo-600 rounded-2xl text-[9px] font-black hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                      >
+                        {isProcessing === `email-${cls}` ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-envelope"></i>}
+                        <span>Mail PDF</span>
                       </button>
-                      <button onClick={() => { const [cl, sec] = cls.split('-') as [any, any]; handleManualCompiledPDF(cl, sec, false); }} className="py-4 bg-gray-50 text-gray-600 rounded-2xl text-[9px] font-black hover:bg-gray-900 hover:text-white transition-all flex items-center justify-center gap-2">
+                      <button onClick={() => { const [cl, sec] = cls.split('-') as [any, any]; handleManualCompiledPDF(cl, sec, false); }} className="py-5 bg-gray-50 text-gray-600 rounded-2xl text-[9px] font-black hover:bg-gray-900 hover:text-white transition-all flex items-center justify-center gap-2">
                         <i className="fas fa-download"></i> Save Local
                       </button>
                     </div>
@@ -230,8 +256,8 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                         />
                      </div>
                      <div className="flex gap-4">
-                        <button onClick={() => alert("Deployment Hook Updated!")} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black text-xs shadow-xl shadow-blue-100 transition-all active:scale-95">Update Hook</button>
-                        <button onClick={() => setSyncUrl('')} className="bg-white text-blue-600 border border-blue-200 px-10 py-4 rounded-2xl font-black text-xs hover:bg-blue-50 transition-all">Disconnect</button>
+                        <button onClick={() => alert("Deployment Hook Updated!")} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-2xl font-black text-xs shadow-xl shadow-blue-100 transition-all active:scale-95">Update Hook</button>
+                        <button onClick={() => setSyncUrl('')} className="bg-white text-blue-600 border border-blue-200 px-10 py-5 rounded-2xl font-black text-xs hover:bg-blue-50 transition-all">Disconnect</button>
                      </div>
                   </div>
                </div>
@@ -242,7 +268,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
             <div className="space-y-10">
                <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-black text-gray-800 tracking-tight">Faculty Registry</h3>
-                  <button onClick={() => { setEditing({ assignedClasses: [] }); setShowModal(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-xs shadow-xl shadow-blue-100 transition-all active:scale-95">
+                  <button onClick={() => { setEditing({ assignedClasses: [] }); setShowModal(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl shadow-blue-100 transition-all active:scale-95">
                     <i className="fas fa-plus mr-2"></i> Add Faculty Member
                   </button>
                </div>
@@ -283,6 +309,10 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                 <div className="space-y-3">
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Official Email</label>
                   <input type="email" className="w-full px-8 py-5 rounded-2xl bg-gray-50 border-gray-100 border outline-none font-bold text-gray-800 focus:border-blue-500" placeholder="e.g. name@sacredheartkoderma.org" value={editing?.email || ''} onChange={e => setEditing({...editing, email: e.target.value})} />
+                </div>
+                <div className="space-y-3">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">WhatsApp Number</label>
+                  <input type="tel" className="w-full px-8 py-5 rounded-2xl bg-gray-50 border-gray-100 border outline-none font-bold text-gray-800 focus:border-blue-500" placeholder="e.g. 91xxxxxxxxxx" value={editing?.whatsapp || ''} onChange={e => setEditing({...editing, whatsapp: e.target.value})} />
                 </div>
                 <button onClick={() => {
                    if (!editing?.name || !editing?.email) return;

@@ -4,7 +4,9 @@ import { Teacher, ClassLevel } from './types';
 export const SCHOOL_NAME = "SACRED HEART SCHOOL";
 export const SCHOOL_SUBTITLE = "(Affiliated to CBSE, New Delhi, upto +2 Level)";
 export const ADMIN_EMAIL = "admin@sacredheartkoderma.org";
-export const SCHOOL_LOGO_URL = "logo.png";
+
+// UPDATE THIS LINE: Change "logo.png" to your actual filename or an absolute URL
+export const SCHOOL_LOGO_URL = "logo.png"; 
 
 export const CLASS_STYLES: Record<ClassLevel, { bg: string, text: string }> = {
   'V': { bg: 'bg-blue-600', text: 'text-blue-600' },
@@ -24,8 +26,6 @@ export const getCurrentWeekMonday = () => {
 export const getNextWeekMonday = () => {
   const d = new Date();
   const day = d.getDay();
-  // Calculate days until next Monday (day 1)
-  // If today is Monday(1), next Monday is 7 days away
   const daysUntilNextMonday = (1 - day + 7) % 7 || 7;
   const nextMonday = new Date(d.setDate(d.getDate() + daysUntilNextMonday));
   nextMonday.setHours(0, 0, 0, 0);
@@ -37,6 +37,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'kishor-kunal', 
     email: 'kunal2959@gmail.com', 
     name: 'Kishor Kunal', 
+    whatsapp: '9852963971',
     isClassTeacher: { classLevel: 'V', section: 'A' },
     assignedClasses: [
       { classLevel: 'V', section: 'A', subject: 'Computer' },
@@ -52,6 +53,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'radha-singh', 
     email: 'radhasingh1223@gmail.com', 
     name: 'Radha Singh', 
+    whatsapp: '8709081170',
     isClassTeacher: { classLevel: 'V', section: 'B' },
     assignedClasses: [
       { classLevel: 'V', section: 'A', subject: 'EVS' },
@@ -64,6 +66,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'renu-kumari', 
     email: '69191@sacredheartkoderma.org', 
     name: 'Renu Kumari', 
+    whatsapp: '8340227030',
     isClassTeacher: { classLevel: 'V', section: 'C' },
     assignedClasses: [
       { classLevel: 'V', section: 'A', subject: 'Hindi' },
@@ -77,6 +80,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'jude-godwin', 
     email: 'frankgodwin416@gmail.com', 
     name: 'Jude Godwin', 
+    whatsapp: '8340203221',
     isClassTeacher: { classLevel: 'VI', section: 'A' },
     assignedClasses: [
       { classLevel: 'V', section: 'A', subject: 'English' },
@@ -90,6 +94,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'neha-kumari', 
     email: 'nehajmt81@gmail.com', 
     name: 'Neha Kumari', 
+    whatsapp: '7667260558',
     isClassTeacher: { classLevel: 'VI', section: 'B' },
     assignedClasses: [
       { classLevel: 'V', section: 'A', subject: 'Mathematics' },
@@ -101,6 +106,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'manoj-kumar', 
     email: 'ms3020998@gmail.com', 
     name: 'Manoj Kumar Singh', 
+    whatsapp: '7739566755',
     isClassTeacher: { classLevel: 'VI', section: 'C' },
     assignedClasses: [
       { classLevel: 'VI', section: 'C', subject: 'Hindi' },
@@ -115,6 +121,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'rahul-kumar', 
     email: 'rahul.kkq@gmail.com', 
     name: 'Rahul Kumar', 
+    whatsapp: '8340370475',
     isClassTeacher: { classLevel: 'VI', section: 'D' },
     assignedClasses: [
       { classLevel: 'VI', section: 'D', subject: 'English' },
@@ -128,6 +135,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'rajni-bala', 
     email: 'nancyrajni1510@gmail.com', 
     name: 'Rajni Bala', 
+    whatsapp: '8709648302',
     isClassTeacher: { classLevel: 'VII', section: 'A' },
     assignedClasses: [
       { classLevel: 'VI', section: 'C', subject: 'English' },
@@ -141,6 +149,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'sumit-shaw', 
     email: '10674690@cbsedigitaledu.in', 
     name: 'Sumit Shaw', 
+    whatsapp: '7908682112',
     isClassTeacher: { classLevel: 'VII', section: 'B' },
     assignedClasses: [
       { classLevel: 'VI', section: 'A', subject: 'Science' },
@@ -155,6 +164,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'anmol-ratan', 
     email: 'anmolratan80@gmail.com', 
     name: 'Anmol Ratan',
+    whatsapp: '7091203535',
     isClassTeacher: { classLevel: 'VII', section: 'C' },
     assignedClasses: [
       { classLevel: 'VII', section: 'A', subject: 'Social Science' },
@@ -167,6 +177,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'sanjay-kumar',
     email: 'sanjaykumar@sacredheartkoderma.org',
     name: 'Sanjay Kumar',
+    whatsapp: '9204434436',
     assignedClasses: [
       { classLevel: 'V', section: 'A', subject: 'Sanskrit' },
       { classLevel: 'V', section: 'B', subject: 'Sanskrit' },
@@ -185,6 +196,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'ramesh-kunj',
     email: 'rameshkunj6311@gmail.com',
     name: 'Ramesh Kunj',
+    whatsapp: '6202915575',
     assignedClasses: [
       { classLevel: 'VI', section: 'A', subject: 'Mathematics' },
       { classLevel: 'VI', section: 'B', subject: 'Mathematics' },
@@ -195,6 +207,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'sujeet-pratap',
     email: 'sujeetpratapsingh65908@gmail.com',
     name: 'Sujeet Pratap Singh',
+    whatsapp: '7667892143',
     isClassTeacher: { classLevel: 'VII', section: 'D' },
     assignedClasses: [
       { classLevel: 'VII', section: 'A', subject: 'Mathematics' },
@@ -209,6 +222,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     id: 'ashutosh-gautam',
     email: 'GAUTAM663@gmail.com',
     name: 'Ashutosh Kumar Gautam',
+    whatsapp: '7004743875',
     assignedClasses: [
       { classLevel: 'VII', section: 'A', subject: 'Computer' },
       { classLevel: 'VII', section: 'B', subject: 'Computer' },

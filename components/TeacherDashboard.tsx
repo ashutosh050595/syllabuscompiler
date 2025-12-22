@@ -12,7 +12,7 @@ interface Props {
   allSubmissions: WeeklySubmission[];
   isCloudEnabled: boolean;
   onSendWarnings: (defaulters: {name: string, email: string}[], weekStarting: string) => void;
-  onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => void;
+  onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => Promise<any>;
 }
 
 interface GroupedAssignment {
@@ -25,6 +25,7 @@ interface GroupedAssignment {
 const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmissions, allSubmissions, isCloudEnabled, onSendWarnings, onSendPdf }) => {
   const nextWeek = getNextWeekMonday();
   const [view, setView] = useState<'status' | 'form' | 'history'>('status');
+  const [isMailing, setIsMailing] = useState(false);
   
   const saturday = new Date(nextWeek);
   saturday.setDate(saturday.getDate() + 5);
@@ -54,7 +55,8 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
           subject: ac.subject,
           teacherName: t.name,
           teacherId: t.id,
-          email: t.email
+          email: t.email,
+          whatsapp: t.whatsapp
         }))
     );
     return requirements.map(req => {
@@ -119,12 +121,12 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
       alert("Excellent! All teachers have submitted plans for your class for the upcoming week.");
       return;
     }
-    // Explicitly target the upcoming week (nextWeek)
     onSendWarnings(defaulters, nextWeek);
   };
 
-  const handleMailCompiled = () => {
+  const handleMailCompiled = async () => {
     if (!teacher.isClassTeacher || !classStatus) return;
+    setIsMailing(true);
     const { classLevel, section } = teacher.isClassTeacher;
     const compiledPlans: Submission[] = classStatus.map(req => {
       const teacherSub = allSubmissions.find(s => s.teacherId === req.teacherId && s.weekStarting === nextWeek);
@@ -137,9 +139,14 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
         classLevel, section
       };
     });
-    const doc = generateSyllabusPDF(compiledPlans, { name: teacher.name, email: teacher.email, classLevel, section }, dates.from, dates.to);
-    const pdfBase64 = doc.output('datauristring');
-    onSendPdf(pdfBase64, teacher.email, `${classLevel}-${section}`, `Compiled_${classLevel}${section}_${nextWeek}.pdf`);
+    
+    try {
+      const doc = generateSyllabusPDF(compiledPlans, { name: teacher.name, email: teacher.email, classLevel, section }, dates.from, dates.to);
+      const pdfBase64 = doc.output('datauristring');
+      await onSendPdf(pdfBase64, teacher.email, `${classLevel}-${section}`, `Compiled_${classLevel}${section}_${nextWeek}.pdf`);
+    } finally {
+      setIsMailing(false);
+    }
   };
 
   const handleWhatsAppShare = () => {
@@ -153,6 +160,17 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
     const message = `${statusMsg}\n\nTeachers, please ensure your submissions are finalized in the SHS Syllabus Manager portal.`;
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
+  };
+
+  const sendPersonalNudge = (teacherName: string, whatsapp: string | undefined, subject: string) => {
+    if (!whatsapp) {
+      alert("WhatsApp number not registered for this teacher.");
+      return;
+    }
+    const { classLevel, section } = teacher.isClassTeacher!;
+    const message = `Dear ${teacherName}, this is a gentle reminder that your lesson plan for Class ${classLevel}-${section} (${subject}) is pending for the upcoming week starting ${nextWeek}. Please submit it on the SHS Portal. Thank you.`;
+    const url = `https://wa.me/${whatsapp.startsWith('+') ? whatsapp.substring(1) : whatsapp}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -185,20 +203,22 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
            <div className="lg:col-span-2 space-y-8">
               {teacher.isClassTeacher && classStatus && (
                 <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-gray-100 relative overflow-hidden">
-                  <div className="flex justify-between items-center mb-8 relative z-10">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 relative z-10 gap-4">
                     <div>
                         <h3 className="text-2xl font-black text-gray-800">Class {teacher.isClassTeacher.classLevel}-{teacher.isClassTeacher.section} Monitoring</h3>
                         <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest mt-1">Targeting Upcoming Week: {nextWeek}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <button onClick={handleMailCompiled} className="bg-gray-900 text-white px-5 py-2.5 rounded-xl text-[10px] font-black hover:bg-black flex items-center gap-2 transition-transform active:scale-95 shadow-lg">
-                        <i className="fas fa-envelope"></i> Mail Compiled PDF
+                      <button 
+                        onClick={handleMailCompiled} 
+                        disabled={isMailing}
+                        className="bg-gray-900 text-white px-5 py-3 rounded-xl text-[10px] font-black hover:bg-black flex items-center gap-2 transition-transform active:scale-95 shadow-lg disabled:opacity-50"
+                      >
+                        {isMailing ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-envelope"></i>}
+                        <span>Mail Compiled PDF</span>
                       </button>
-                      <button onClick={handleWhatsAppShare} className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black hover:bg-emerald-700 flex items-center gap-2 transition-transform active:scale-95 shadow-lg shadow-emerald-100">
-                        <i className="fab fa-whatsapp"></i> Share on WhatsApp
-                      </button>
-                      <button onClick={handleWarnDefaulters} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black hover:bg-blue-700 flex items-center gap-2 transition-transform active:scale-95 shadow-lg shadow-blue-100">
-                        <i className="fas fa-bullhorn"></i> Send Manual Warnings
+                      <button onClick={handleWhatsAppShare} className="bg-emerald-600 text-white px-5 py-3 rounded-xl text-[10px] font-black hover:bg-emerald-700 flex items-center gap-2 transition-transform active:scale-95 shadow-lg shadow-emerald-100">
+                        <i className="fab fa-whatsapp"></i> <span>Share Status</span>
                       </button>
                     </div>
                   </div>
@@ -210,9 +230,26 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
                             <p className={`text-xs font-black ${item.submitted ? 'text-emerald-800' : 'text-blue-800'}`}>{item.subject}</p>
                             <p className={`text-[10px] font-bold ${item.submitted ? 'text-emerald-600/70' : 'text-blue-600/70'}`}>{item.teacherName}</p>
                           </div>
-                          {item.submitted ? <i className="fas fa-check-circle text-emerald-500"></i> : <i className="fas fa-exclamation-triangle text-blue-400 animate-pulse"></i>}
+                          <div className="flex items-center gap-2">
+                            {!item.submitted && (
+                              <button 
+                                onClick={() => sendPersonalNudge(item.teacherName, item.whatsapp, item.subject)}
+                                className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                                title="Send personal WhatsApp nudge"
+                              >
+                                <i className="fab fa-whatsapp"></i>
+                              </button>
+                            )}
+                            {item.submitted ? <i className="fas fa-check-circle text-emerald-500"></i> : <i className="fas fa-exclamation-triangle text-blue-400 animate-pulse"></i>}
+                          </div>
                       </div>
                     ))}
+                  </div>
+                  
+                  <div className="mt-8 flex justify-center">
+                    <button onClick={handleWarnDefaulters} className="w-full bg-blue-600 text-white py-4 rounded-2xl text-[11px] font-black hover:bg-blue-700 flex items-center justify-center gap-3 transition-transform active:scale-95 shadow-lg shadow-blue-100 uppercase tracking-widest">
+                        <i className="fas fa-bullhorn text-sm"></i> Send Batch Warning Emails
+                    </button>
                   </div>
                 </div>
               )}

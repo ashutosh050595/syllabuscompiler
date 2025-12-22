@@ -12,6 +12,7 @@ export interface Teacher {
   id: string;
   email: string;
   name: string;
+  whatsapp?: string; // WhatsApp phone number
   assignedClasses: AssignedClass[];
   isClassTeacher?: {
     classLevel: ClassLevel;
