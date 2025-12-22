@@ -18,6 +18,58 @@ const App: React.FC = () => {
   const teachersRef = useRef<Teacher[]>([]);
   const syncUrlRef = useRef<string>('');
 
+  // Helper to post data to cloud
+  const cloudPost = async (url: string, payload: any) => {
+    if (!url || !url.startsWith('http')) return false;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        mode: 'cors',
+        redirect: 'follow'
+      });
+      return response.ok || response.status === 0 || response.type === 'opaque';
+    } catch (err) {
+      console.debug("Note: Cloud request dispatched despite browser warning.");
+      return true; 
+    }
+  };
+
+  // Helper to fetch registry
+  const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
+    if (!url || !url.startsWith('http')) return false;
+    try {
+      const response = await fetch(url); 
+      const data = await response.json();
+      
+      if (data.result === 'success') {
+        // Case 1: Cloud has data
+        if (data.teachers && Array.isArray(data.teachers) && data.teachers.length > 0) {
+          setTeachers(data.teachers);
+          teachersRef.current = data.teachers;
+          localStorage.setItem('sh_teachers_v4', JSON.stringify(data.teachers));
+        } 
+        // Case 2: Cloud is empty (New Deployment). Automatically seed it.
+        else {
+          console.log("Cloud registry is empty. Auto-seeding with initial data...");
+          await cloudPost(url, { 
+            action: 'SYNC_REGISTRY', 
+            teachers: INITIAL_TEACHERS 
+          });
+          // Set local state to initial defaults
+          setTeachers(INITIAL_TEACHERS);
+          teachersRef.current = INITIAL_TEACHERS;
+        }
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.debug("Cloud fetch unavailable:", err);
+      return false;
+    }
+  };
+
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -40,6 +92,7 @@ const App: React.FC = () => {
         syncUrlRef.current = activeSyncUrl;
         localStorage.setItem('sh_sync_url', activeSyncUrl);
 
+        // Load local data first
         const initialTeachers = savedTeachers ? JSON.parse(savedTeachers) : INITIAL_TEACHERS;
         setTeachers(initialTeachers);
         teachersRef.current = initialTeachers;
@@ -55,8 +108,9 @@ const App: React.FC = () => {
           }
         }
 
+        // Try to fetch/sync with cloud
         if (activeSyncUrl && activeSyncUrl.startsWith('http')) {
-          fetchRegistryFromCloud(activeSyncUrl);
+          await fetchRegistryFromCloud(activeSyncUrl);
         }
       } catch (error) {
         console.error("Initialization error:", error);
@@ -67,23 +121,6 @@ const App: React.FC = () => {
 
     initialize();
   }, []);
-
-  const cloudPost = async (url: string, payload: any) => {
-    if (!url || !url.startsWith('http')) return false;
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload),
-        mode: 'cors',
-        redirect: 'follow'
-      });
-      return response.ok || response.status === 0 || response.type === 'opaque';
-    } catch (err) {
-      console.debug("Note: Cloud request dispatched despite browser warning.");
-      return true; 
-    }
-  };
 
   const updateSubmissions = async (newSubs: WeeklySubmission[]) => {
     setSubmissions(newSubs);
@@ -138,29 +175,24 @@ const App: React.FC = () => {
     });
   };
 
-  const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
-    if (!url || !url.startsWith('http')) return false;
-    try {
-      const response = await fetch(url); 
-      const data = await response.json();
-      if (data.result === 'success' && data.teachers) {
-        setTeachers(data.teachers);
-        teachersRef.current = data.teachers;
-        localStorage.setItem('sh_teachers_v4', JSON.stringify(data.teachers));
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.debug("Cloud fetch unavailable:", err);
-      return false;
-    }
-  };
-
   const updateTeachers = (newTeachers: Teacher[]) => {
     setTeachers(newTeachers);
     teachersRef.current = newTeachers;
     localStorage.setItem('sh_teachers_v4', JSON.stringify(newTeachers));
     syncRegistryToCloud(newTeachers);
+  };
+
+  const handleManualResetRegistry = async () => {
+    // Force reset to hardcoded constants
+    setTeachers(INITIAL_TEACHERS);
+    teachersRef.current = INITIAL_TEACHERS;
+    localStorage.setItem('sh_teachers_v4', JSON.stringify(INITIAL_TEACHERS));
+    if (syncUrlRef.current) {
+      await syncRegistryToCloud(INITIAL_TEACHERS);
+      alert("Database restored to defaults and uploading to cloud...");
+    } else {
+      alert("Local database restored.");
+    }
   };
 
   const handleLogin = (u: Teacher | { email: string; isAdmin: true }) => {
@@ -177,6 +209,7 @@ const App: React.FC = () => {
     setSyncUrl(url);
     syncUrlRef.current = url;
     localStorage.setItem('sh_sync_url', url);
+    // Explicitly sync when URL changes
     if (teachersRef.current.length > 0) syncRegistryToCloud(teachersRef.current);
   };
 
@@ -259,6 +292,7 @@ const App: React.FC = () => {
               resubmitRequests={resubmitRequests} onApproveResubmit={handleApproveResubmit}
               syncUrl={syncUrl} setSyncUrl={updateSyncUrl}
               onSendWarnings={triggerWarningEmails} onSendPdf={triggerCompiledPdfEmail}
+              onResetRegistry={handleManualResetRegistry}
             />
           ) : (
             <TeacherDashboard 

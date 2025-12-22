@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Teacher, WeeklySubmission, ClassLevel, Section, Submission, AssignedClass, ResubmitRequest } from '../types';
 import { getNextWeekMonday, getWhatsAppLink, ALL_CLASSES, ALL_SECTIONS, SCHOOL_NAME } from '../constants';
@@ -14,6 +15,7 @@ interface Props {
   setSyncUrl: (url: string) => void;
   onSendWarnings: (defaulters: {name: string, email: string}[], weekStarting: string) => Promise<boolean>;
   onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => Promise<any>;
+  onResetRegistry?: () => Promise<void>;
 }
 
 interface BatchStatus {
@@ -26,7 +28,7 @@ interface BatchStatus {
   log: string[];
 }
 
-const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, onSendWarnings, onSendPdf }) => {
+const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, onSendWarnings, onSendPdf, onResetRegistry }) => {
   const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'requests' | 'archive'>('monitor');
   const [showInfoModal, setShowInfoModal] = useState(false);
   const nextWeek = getNextWeekMonday();
@@ -321,6 +323,14 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-2xl font-black text-gray-800 tracking-tight">Faculty Registry</h3>
                   <div className="flex gap-3">
+                    {onResetRegistry && (
+                      <button 
+                        onClick={onResetRegistry}
+                        className="px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-2"
+                      >
+                        <i className="fas fa-database"></i> Reset & Upload Defaults
+                      </button>
+                    )}
                     <button 
                       onClick={handleCopyOutline}
                       className={`px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 ${copyFeedback ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}

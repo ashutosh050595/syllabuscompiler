@@ -278,7 +278,7 @@ function sendFormalCompilationEmail(name, email, cls, sec, weekRange, driveLink,
     "<p><a href='" + driveLink + "' style='background-color: #003399; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-weight: bold;'>View in Google Drive</a></p>" +
     "<br>" +
     "<p>Best Regards,</p>" +
-    "<p><b>Academic Automation System</b><br>Sacred Heart School</p>" +
+    "<p><b>Coordinator</b><br>Sacred Heart School</p>" +
     "</div>";
     
   GmailApp.sendEmail(email, subject, "", {
