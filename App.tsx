@@ -51,83 +51,29 @@ const App: React.FC = () => {
       setTeachers(INITIAL_TEACHERS);
       teachersRef.current = INITIAL_TEACHERS;
     }
-
-    const interval = setInterval(runAutonomousScheduler, 60000);
-    return () => clearInterval(interval);
   }, []);
 
-  const runAutonomousScheduler = () => {
-    const now = new Date();
-    const day = now.getDay();
-    const hour = now.getHours();
-    const dateStr = now.toISOString().split('T')[0];
-    const nextMonday = getNextWeekMonday();
-
-    if ([4, 5, 6].includes(day) && hour === 14) {
-      const runKey = `auto_remind_${dateStr}`;
-      if (!localStorage.getItem(runKey) && syncUrlRef.current) {
-        const submittedIds = new Set(submissionsRef.current.filter(s => s.weekStarting === nextMonday).map(s => s.teacherId));
-        const defaulters = teachersRef.current
-          .filter(t => !submittedIds.has(t.id))
-          .map(t => ({ name: t.name, email: t.email }));
-
-        if (defaulters.length > 0) {
-          triggerWarningEmails(defaulters, nextMonday, true);
-        }
-        localStorage.setItem(runKey, 'true');
-      }
-    }
-
-    if (day === 6 && hour === 21) {
-      const runKey = `auto_compile_${dateStr}`;
-      if (!localStorage.getItem(runKey) && syncUrlRef.current) {
-        runAutomatedCompilation(nextMonday);
-        localStorage.setItem(runKey, 'true');
-      }
+  const syncRegistryToCloud = async (currentTeachers: Teacher[]) => {
+    const url = syncUrlRef.current || syncUrl;
+    if (!url) return;
+    try {
+      await fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'SYNC_REGISTRY', teachers: currentTeachers })
+      });
+      console.log("Cloud Registry Updated Successfully");
+    } catch (err) {
+      console.error("Cloud Registry Sync Failed", err);
     }
   };
 
-  const runAutomatedCompilation = async (weekStarting: string) => {
-    const classes: { level: ClassLevel, sec: Section }[] = [
-      { level: 'V', sec: 'A' }, { level: 'V', sec: 'B' }, { level: 'V', sec: 'C' },
-      { level: 'VI', sec: 'A' }, { level: 'VI', sec: 'B' }, { level: 'VI', sec: 'C' }, { level: 'VI', sec: 'D' },
-      { level: 'VII', sec: 'A' }, { level: 'VII', sec: 'B' }, { level: 'VII', sec: 'C' }, { level: 'VII', sec: 'D' }
-    ];
-
-    for (const cls of classes) {
-      const classTeacher = teachersRef.current.find(t => t.isClassTeacher?.classLevel === cls.level && t.isClassTeacher?.section === cls.sec);
-      if (!classTeacher) continue;
-
-      const requirements = teachersRef.current.flatMap(t => 
-        t.assignedClasses
-          .filter(ac => ac.classLevel === cls.level && ac.section === cls.sec)
-          .map(ac => ({ subject: ac.subject, teacherName: t.name, teacherId: t.id }))
-      );
-
-      const compiledPlans: Submission[] = requirements.map(req => {
-        const teacherSub = submissionsRef.current.find(s => s.teacherId === req.teacherId && s.weekStarting === weekStarting);
-        const plan = teacherSub?.plans.find(p => p.classLevel === cls.level && p.section === cls.sec && p.subject === req.subject);
-        return {
-          subject: req.subject,
-          teacherName: req.teacherName,
-          chapterName: plan?.chapterName || 'PENDING',
-          topics: plan?.topics || 'PENDING',
-          homework: plan?.homework || 'PENDING',
-          classLevel: cls.level,
-          section: cls.sec
-        };
-      });
-
-      const doc = generateSyllabusPDF(compiledPlans, { 
-        name: classTeacher.name, 
-        email: classTeacher.email, 
-        classLevel: cls.level, 
-        section: cls.sec 
-      }, weekStarting, "Saturday");
-      
-      const pdfBase64 = doc.output('datauristring');
-      await triggerCompiledPdfEmail(pdfBase64, classTeacher.email, `${cls.level}-${cls.sec}`, `Auto_Syllabus_${cls.level}${cls.sec}_${weekStarting}.pdf`, true);
-    }
+  const updateTeachers = (newTeachers: Teacher[]) => {
+    setTeachers(newTeachers);
+    teachersRef.current = newTeachers;
+    localStorage.setItem('sh_teachers_v4', JSON.stringify(newTeachers));
+    syncRegistryToCloud(newTeachers);
   };
 
   const handleLogin = (u: Teacher | { email: string; isAdmin: true }) => {
@@ -140,16 +86,11 @@ const App: React.FC = () => {
     sessionStorage.removeItem('sh_user');
   };
 
-  const updateTeachers = (newTeachers: Teacher[]) => {
-    setTeachers(newTeachers);
-    teachersRef.current = newTeachers;
-    localStorage.setItem('sh_teachers_v4', JSON.stringify(newTeachers));
-  };
-
   const updateSyncUrl = (url: string) => {
     setSyncUrl(url);
     syncUrlRef.current = url;
     localStorage.setItem('sh_sync_url', url);
+    if (teachersRef.current.length > 0) syncRegistryToCloud(teachersRef.current);
   };
 
   const updateSubmissions = async (newSubs: WeeklySubmission[]) => {
@@ -173,10 +114,10 @@ const App: React.FC = () => {
     }
   };
 
-  const triggerWarningEmails = async (defaulters: { name: string, email: string }[], weekStarting?: string, isAuto = false) => {
+  const triggerWarningEmails = async (defaulters: { name: string, email: string }[], weekStarting?: string) => {
     const url = syncUrlRef.current || syncUrl;
     if (!url) {
-      if (!isAuto) alert("Cloud Sync is not configured on this device. Please enter the Deployment URL in Settings first.");
+      alert("Deployment URL not set.");
       return;
     }
     const week = weekStarting || getNextWeekMonday();
@@ -184,48 +125,28 @@ const App: React.FC = () => {
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
-        credentials: 'omit',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'SEND_WARNINGS', 
-          defaulters, 
-          weekStarting: week,
-          portalLink: PORTAL_LINK,
-          isAuto
-        })
+        body: JSON.stringify({ action: 'SEND_WARNINGS', defaulters, weekStarting: week, portalLink: PORTAL_LINK })
       });
-      if (!isAuto) alert(`Success: Warning emails dispatched to ${defaulters.length} teachers for the upcoming week (${week}).`);
+      alert(`Success: Reminders sent.`);
     } catch (err) {
-      if (!isAuto) alert("Critical Error: Failed to connect to the automation backend. Check internet or Deployment URL.");
+      alert("Error reaching cloud.");
     }
   };
 
-  const triggerCompiledPdfEmail = async (pdfBase64: string, recipient: string, className: string, filename: string, isAuto = false) => {
+  const triggerCompiledPdfEmail = async (pdfBase64: string, recipient: string, className: string, filename: string) => {
     const url = syncUrlRef.current || syncUrl;
-    if (!url) {
-      if (!isAuto) alert("Cloud Sync not configured on this device. Use the settings to paste the Deployment URL.");
-      return;
-    }
+    if (!url) return;
     try {
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
-        credentials: 'omit',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'SEND_COMPILED_PDF', 
-          pdfBase64, 
-          recipient, 
-          className, 
-          filename,
-          isAuto,
-          weekStarting: getNextWeekMonday()
-        })
+        body: JSON.stringify({ action: 'SEND_COMPILED_PDF', pdfBase64, recipient, className, filename, weekStarting: getNextWeekMonday() })
       });
-      if (!isAuto) alert(`Success: Request sent to cloud for ${recipient}. Please check email in 1-2 mins.`);
+      alert(`Success: Report emailed.`);
       return true;
     } catch (err) {
-      if (!isAuto) alert("Mobile sync error: Failed to reach server. Please try on PC or check internet.");
       return false;
     }
   };
@@ -237,12 +158,7 @@ const App: React.FC = () => {
           <div className="flex items-center space-x-4">
             <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center overflow-hidden">
               {logoLoaded ? (
-                <img 
-                  src={SCHOOL_LOGO_URL} 
-                  alt="SHS" 
-                  className="w-full h-full object-contain"
-                  onError={() => setLogoLoaded(false)}
-                />
+                <img src={SCHOOL_LOGO_URL} alt="SHS" className="w-full h-full object-contain" onError={() => setLogoLoaded(false)} />
               ) : (
                 <i className="fas fa-school text-blue-600 text-2xl"></i>
               )}
@@ -252,7 +168,6 @@ const App: React.FC = () => {
               <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-widest">Jhumri Telaiya, Estd. 1997</p>
             </div>
           </div>
-          
           {user && (
             <div className="flex items-center space-x-4">
               <div className="text-right hidden sm:block">
@@ -273,26 +188,17 @@ const App: React.FC = () => {
             <Login onLogin={handleLogin} teachers={teachers} />
           ) : 'isAdmin' in user ? (
             <AdminDashboard 
-              teachers={teachers} 
-              setTeachers={updateTeachers}
-              submissions={submissions}
-              setSubmissions={updateSubmissions}
-              syncUrl={syncUrl}
-              setSyncUrl={updateSyncUrl}
-              onSendWarnings={triggerWarningEmails}
-              onSendPdf={triggerCompiledPdfEmail}
+              teachers={teachers} setTeachers={updateTeachers}
+              submissions={submissions} setSubmissions={updateSubmissions}
+              syncUrl={syncUrl} setSyncUrl={updateSyncUrl}
+              onSendWarnings={triggerWarningEmails} onSendPdf={triggerCompiledPdfEmail}
             />
           ) : (
             <TeacherDashboard 
-              teacher={user as Teacher} 
-              submissions={submissions}
-              setSubmissions={updateSubmissions}
-              allSubmissions={submissions}
-              isCloudEnabled={!!syncUrl}
-              syncUrl={syncUrl}
-              setSyncUrl={updateSyncUrl}
-              onSendWarnings={triggerWarningEmails}
-              onSendPdf={triggerCompiledPdfEmail}
+              teacher={user as Teacher} submissions={submissions} setSubmissions={updateSubmissions}
+              allSubmissions={submissions} isCloudEnabled={!!syncUrl}
+              syncUrl={syncUrl} setSyncUrl={updateSyncUrl}
+              onSendWarnings={triggerWarningEmails} onSendPdf={triggerCompiledPdfEmail}
             />
           )}
         </div>
@@ -304,9 +210,7 @@ const App: React.FC = () => {
              <i className="fas fa-school text-3xl"></i>
           </div>
           <div>
-            <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em]">
-              Designed and developed by ASHUTOSH KUMAR GAUTAM
-            </p>
+            <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em]">Designed and developed by ASHUTOSH KUMAR GAUTAM</p>
             <p className="text-[10px] text-gray-300 font-bold mt-1">{SCHOOL_NAME}, Jhumri Telaiya</p>
           </div>
         </div>
