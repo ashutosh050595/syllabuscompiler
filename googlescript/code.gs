@@ -116,6 +116,7 @@ function handleWarningEmails(data) {
   var defaulters = data.defaulters;
   var week = data.weekStarting;
   var isAuto = data.isAuto;
+  var portalLink = data.portalLink || "https://syllabuscompiler-ruddy.vercel.app/";
 
   defaulters.forEach(function(teacher) {
     var subject = "URGENT: Lesson Plan Pending - Sacred Heart School";
@@ -123,9 +124,10 @@ function handleWarningEmails(data) {
                "This is an " + (isAuto ? "automated " : "") + "reminder from the Academic Office.\n\n" +
                "Our records show that your Weekly Lesson Plan for the week beginning " + week + 
                " has not been submitted yet.\n\n" +
-               "Please log in to the Syllabus Manager portal and finalize your submission immediately.\n\n" +
+               "Please log in to the Syllabus Manager portal immediately and finalize your submission:\n" +
+               portalLink + "\n\n" +
                "Regards,\n" +
-               "Admin Office\n" +
+               "Academic Office\n" +
                "Sacred Heart School, Koderma";
 
     GmailApp.sendEmail(teacher.email, subject, body);

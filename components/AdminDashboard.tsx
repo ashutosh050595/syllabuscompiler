@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Teacher, WeeklySubmission, ClassLevel, Section, Submission } from '../types';
-import { getNextWeekMonday, ADMIN_EMAIL, INITIAL_TEACHERS } from '../constants';
+import { getNextWeekMonday, ADMIN_EMAIL, INITIAL_TEACHERS, PORTAL_LINK } from '../constants';
 import { generateSyllabusPDF } from '../services/pdfService';
 
 interface Props {
@@ -118,7 +118,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
       alert("WhatsApp number not registered.");
       return;
     }
-    const message = `Hi ${teacher.name}, this is a reminder that your lesson plan for Class ${classKey} is pending for the week starting ${nextWeek}. Please submit it as soon as possible on the portal.`;
+    const message = `Hi ${teacher.name}, this is a reminder that your lesson plan for Class ${classKey} is pending for the week starting ${nextWeek}.\n\nPlease submit it as soon as possible on the portal here: ${PORTAL_LINK}`;
     const url = `https://wa.me/${teacher.whatsapp.startsWith('+') ? teacher.whatsapp.substring(1) : teacher.whatsapp}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };

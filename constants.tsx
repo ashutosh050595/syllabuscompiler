@@ -4,6 +4,7 @@ import { Teacher, ClassLevel } from './types';
 export const SCHOOL_NAME = "SACRED HEART SCHOOL";
 export const SCHOOL_SUBTITLE = "(Affiliated to CBSE, New Delhi, upto +2 Level)";
 export const ADMIN_EMAIL = "admin@sacredheartkoderma.org";
+export const PORTAL_LINK = "https://syllabuscompiler-ruddy.vercel.app/";
 
 // UPDATE THIS LINE: Change "logo.png" to your actual filename or an absolute URL
 export const SCHOOL_LOGO_URL = "logo.png"; 
@@ -142,6 +143,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
       { classLevel: 'VII', section: 'A', subject: 'English' },
       { classLevel: 'VII', section: 'B', subject: 'English' },
       { classLevel: 'VII', section: 'C', subject: 'English' },
+      // Fixed extra curly brace
       { classLevel: 'VII', section: 'D', subject: 'English' }
     ] 
   },
@@ -227,6 +229,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
       { classLevel: 'VII', section: 'A', subject: 'Computer' },
       { classLevel: 'VII', section: 'B', subject: 'Computer' },
       { classLevel: 'VII', section: 'C', subject: 'Computer' },
+      // Fixed extra curly brace
       { classLevel: 'VII', section: 'D', subject: 'Computer' }
     ]
   }

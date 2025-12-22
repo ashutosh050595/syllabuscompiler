@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Teacher, WeeklySubmission, ClassPlan, Submission, Section, ClassLevel } from '../types';
-import { getNextWeekMonday, CLASS_STYLES, INITIAL_TEACHERS } from '../constants';
+import { getNextWeekMonday, CLASS_STYLES, INITIAL_TEACHERS, PORTAL_LINK } from '../constants';
 import { refineSyllabusContent } from '../services/geminiService';
 import { generateSyllabusPDF } from '../services/pdfService';
 
@@ -11,6 +11,8 @@ interface Props {
   setSubmissions: (s: WeeklySubmission[]) => void;
   allSubmissions: WeeklySubmission[];
   isCloudEnabled: boolean;
+  syncUrl: string;
+  setSyncUrl: (url: string) => void;
   onSendWarnings: (defaulters: {name: string, email: string}[], weekStarting: string) => void;
   onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => Promise<any>;
 }
@@ -22,9 +24,9 @@ interface GroupedAssignment {
   sections: Section[];
 }
 
-const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmissions, allSubmissions, isCloudEnabled, onSendWarnings, onSendPdf }) => {
+const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmissions, allSubmissions, isCloudEnabled, syncUrl, setSyncUrl, onSendWarnings, onSendPdf }) => {
   const nextWeek = getNextWeekMonday();
-  const [view, setView] = useState<'status' | 'form' | 'history'>('status');
+  const [view, setView] = useState<'status' | 'form' | 'history' | 'setup'>('status');
   const [isMailing, setIsMailing] = useState(false);
   
   const saturday = new Date(nextWeek);
@@ -126,6 +128,12 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
 
   const handleMailCompiled = async () => {
     if (!teacher.isClassTeacher || !classStatus) return;
+    
+    if (!syncUrl) {
+      setView('setup');
+      return;
+    }
+
     setIsMailing(true);
     const { classLevel, section } = teacher.isClassTeacher;
     const compiledPlans: Submission[] = classStatus.map(req => {
@@ -157,7 +165,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
       ? `✅ All lesson plans for Class ${classLevel}-${section} for the week of ${nextWeek} have been submitted and compiled.`
       : `⚠️ Attention: ${pendingCount} lesson plans are still pending for Class ${classLevel}-${section} for the upcoming week starting ${nextWeek}.`;
     
-    const message = `${statusMsg}\n\nTeachers, please ensure your submissions are finalized in the SHS Syllabus Manager portal.`;
+    const message = `${statusMsg}\n\nTeachers, please ensure your submissions are finalized in the SHS Syllabus Manager portal here:\n${PORTAL_LINK}`;
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
   };
@@ -168,7 +176,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
       return;
     }
     const { classLevel, section } = teacher.isClassTeacher!;
-    const message = `Dear ${teacherName}, this is a gentle reminder that your lesson plan for Class ${classLevel}-${section} (${subject}) is pending for the upcoming week starting ${nextWeek}. Please submit it on the SHS Portal. Thank you.`;
+    const message = `Dear ${teacherName}, this is a gentle reminder that your lesson plan for Class ${classLevel}-${section} (${subject}) is pending for the upcoming week starting ${nextWeek}.\n\nPlease submit it on the SHS Portal here: ${PORTAL_LINK}\n\nThank you.`;
     const url = `https://wa.me/${whatsapp.startsWith('+') ? whatsapp.substring(1) : whatsapp}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
@@ -186,17 +194,45 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
               <span className="text-sm font-bold text-gray-400">{teacher.email}</span>
               {isCloudEnabled && (
                 <span className="flex items-center gap-1.5 bg-blue-50 text-blue-600 text-[8px] font-black uppercase px-2 py-0.5 rounded-full border border-blue-100">
-                  <i className="fas fa-cloud-check"></i> Cloud Sync Active
+                  <i className="fas fa-cloud-check"></i> Cloud Active
                 </span>
               )}
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-center">
            <button onClick={() => setView('status')} className={`px-6 py-3 rounded-2xl text-xs font-black transition-all ${view === 'status' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'}`}>Monitor Status</button>
            <button onClick={() => setView('form')} className={`px-6 py-3 rounded-2xl text-xs font-black transition-all ${view === 'form' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}>Fill Next Plan</button>
+           {teacher.isClassTeacher && (
+             <button onClick={() => setView('setup')} className={`w-10 h-10 flex items-center justify-center rounded-2xl transition-all ${view === 'setup' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400'}`} title="Cloud Settings">
+               <i className="fas fa-cog"></i>
+             </button>
+           )}
         </div>
       </div>
+
+      {view === 'setup' && teacher.isClassTeacher && (
+        <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-center gap-4 mb-6">
+             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><i className="fas fa-cloud-bolt"></i></div>
+             <h3 className="text-xl font-black text-gray-800 uppercase tracking-tight">Cloud Configuration (Class Teacher)</h3>
+          </div>
+          <p className="text-sm text-gray-500 mb-6">If the "Mail PDF" button is disabled on this device, paste the <b>Deployment URL</b> provided by the Admin below. This setting is stored locally on this phone/browser.</p>
+          <div className="space-y-4">
+             <input 
+               type="url" 
+               className="w-full px-6 py-4 rounded-xl bg-gray-50 border border-gray-100 font-bold outline-none focus:border-blue-500 transition-all" 
+               placeholder="https://script.google.com/macros/s/..."
+               value={syncUrl}
+               onChange={(e) => setSyncUrl(e.target.value)}
+             />
+             <div className="flex gap-3">
+               <button onClick={() => setView('status')} className="flex-1 bg-blue-600 text-white py-4 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-100">Save Configuration</button>
+               <button onClick={() => setView('status')} className="px-6 py-4 bg-gray-100 text-gray-500 rounded-xl font-black text-xs uppercase tracking-widest">Cancel</button>
+             </div>
+          </div>
+        </div>
+      )}
 
       {view === 'status' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -246,9 +282,12 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
                     ))}
                   </div>
                   
-                  <div className="mt-8 flex justify-center">
-                    <button onClick={handleWarnDefaulters} className="w-full bg-blue-600 text-white py-4 rounded-2xl text-[11px] font-black hover:bg-blue-700 flex items-center justify-center gap-3 transition-transform active:scale-95 shadow-lg shadow-blue-100 uppercase tracking-widest">
-                        <i className="fas fa-bullhorn text-sm"></i> Send Batch Warning Emails
+                  <div className="mt-8">
+                    <button 
+                      onClick={handleWarnDefaulters} 
+                      className="w-full bg-blue-600 text-white py-4 rounded-2xl text-[11px] font-black hover:bg-blue-700 flex items-center justify-center gap-3 transition-transform active:scale-95 shadow-lg shadow-blue-100 uppercase tracking-widest"
+                    >
+                        <i className="fas fa-bullhorn text-sm"></i> Send Reminder Emails to Defaulters
                     </button>
                   </div>
                 </div>
@@ -303,7 +342,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
       )}
 
       {view === 'form' && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-gray-100">
+        <form onSubmit={handleSubmit} className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-gray-100 animate-in slide-in-from-bottom-4 duration-500">
           <div className="bg-gray-800 p-12 text-white flex justify-between items-center">
              <div>
                <h3 className="text-4xl font-black tracking-tight">Academic Planning</h3>
@@ -339,14 +378,14 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
                              <div className="space-y-3">
                                 <div className="flex justify-between items-center px-1">
                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Topics/Subtopics of the Chapter to be taught *</label>
-                                   <button type="button" onClick={() => handleRefine(g.id, 'topics')} className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase"><i className="fas fa-magic"></i> AI Polish</button>
+                                   <button type="button" onClick={() => handleRefine(g.id, 'topics')} className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full uppercase"><i className="fas fa-magic"></i> AI Polish</button>
                                 </div>
                                 <textarea required rows={5} className="w-full px-8 py-6 rounded-[2.5rem] bg-gray-50 border-gray-100 border outline-none text-sm font-medium" placeholder="Break down the topics..." value={formData[g.id]?.topics || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], topics: e.target.value } })} />
                              </div>
                              <div className="space-y-3">
                                 <div className="flex justify-between items-center px-1">
                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Proposed Home Work *</label>
-                                   <button type="button" onClick={() => handleRefine(g.id, 'homework')} className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase"><i className="fas fa-magic"></i> AI Polish</button>
+                                   <button type="button" onClick={() => handleRefine(g.id, 'homework')} className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full uppercase"><i className="fas fa-magic"></i> AI Polish</button>
                                 </div>
                                 <textarea required rows={5} className="w-full px-8 py-6 rounded-[2.5rem] bg-gray-50 border-gray-100 border outline-none text-sm font-medium" placeholder="Assign homework..." value={formData[g.id]?.homework || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], homework: e.target.value } })} />
                              </div>

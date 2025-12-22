@@ -4,7 +4,7 @@ import { Teacher, WeeklySubmission, ClassLevel, Section, Submission } from './ty
 import Login from './components/Login';
 import TeacherDashboard from './components/TeacherDashboard';
 import AdminDashboard from './components/AdminDashboard';
-import { SCHOOL_NAME, INITIAL_TEACHERS, getCurrentWeekMonday, getNextWeekMonday, SCHOOL_LOGO_URL } from './constants';
+import { SCHOOL_NAME, INITIAL_TEACHERS, getCurrentWeekMonday, getNextWeekMonday, SCHOOL_LOGO_URL, PORTAL_LINK } from './constants';
 import { generateSyllabusPDF } from './services/pdfService';
 
 const App: React.FC = () => {
@@ -163,6 +163,7 @@ const App: React.FC = () => {
         await fetch(syncUrlRef.current, {
           method: 'POST',
           mode: 'no-cors',
+          credentials: 'omit',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...latestSub, action: 'SUBMIT_PLAN' })
         });
@@ -173,9 +174,9 @@ const App: React.FC = () => {
   };
 
   const triggerWarningEmails = async (defaulters: { name: string, email: string }[], weekStarting?: string, isAuto = false) => {
-    const url = syncUrlRef.current;
+    const url = syncUrlRef.current || syncUrl;
     if (!url) {
-      if (!isAuto) alert("Cloud Sync is not configured. Admin must set the Deployment URL first in Settings.");
+      if (!isAuto) alert("Cloud Sync is not configured on this device. Please enter the Deployment URL in Settings first.");
       return;
     }
     const week = weekStarting || getNextWeekMonday();
@@ -183,11 +184,13 @@ const App: React.FC = () => {
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
+        credentials: 'omit',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           action: 'SEND_WARNINGS', 
           defaulters, 
           weekStarting: week,
+          portalLink: PORTAL_LINK,
           isAuto
         })
       });
@@ -198,15 +201,16 @@ const App: React.FC = () => {
   };
 
   const triggerCompiledPdfEmail = async (pdfBase64: string, recipient: string, className: string, filename: string, isAuto = false) => {
-    const url = syncUrlRef.current;
+    const url = syncUrlRef.current || syncUrl;
     if (!url) {
-      if (!isAuto) alert("Cloud Sync not configured.");
+      if (!isAuto) alert("Cloud Sync not configured on this device. Use the settings to paste the Deployment URL.");
       return;
     }
     try {
-      const response = await fetch(url, {
+      await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
+        credentials: 'omit',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           action: 'SEND_COMPILED_PDF', 
@@ -285,6 +289,8 @@ const App: React.FC = () => {
               setSubmissions={updateSubmissions}
               allSubmissions={submissions}
               isCloudEnabled={!!syncUrl}
+              syncUrl={syncUrl}
+              setSyncUrl={updateSyncUrl}
               onSendWarnings={triggerWarningEmails}
               onSendPdf={triggerCompiledPdfEmail}
             />
