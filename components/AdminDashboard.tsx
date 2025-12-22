@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Teacher, WeeklySubmission, ClassLevel, Section, Submission } from '../types';
-import { getCurrentWeekMonday, ADMIN_EMAIL, INITIAL_TEACHERS } from '../constants';
+import { getNextWeekMonday, ADMIN_EMAIL, INITIAL_TEACHERS } from '../constants';
 import { generateSyllabusPDF } from '../services/pdfService';
 
 interface Props {
@@ -11,21 +11,21 @@ interface Props {
   setSubmissions: (s: WeeklySubmission[]) => void;
   syncUrl: string;
   setSyncUrl: (url: string) => void;
-  onSendWarnings: (defaulters: {name: string, email: string}[]) => void;
+  onSendWarnings: (defaulters: {name: string, email: string}[], weekStarting: string) => void;
   onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => void;
 }
 
 const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, syncUrl, setSyncUrl, onSendWarnings, onSendPdf }) => {
   const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'settings' | 'archive'>('monitor');
-  const currentWeek = getCurrentWeekMonday();
+  const nextWeek = getNextWeekMonday();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Partial<Teacher> | null>(null);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
   const missingTeachers = useMemo(() => {
-    const submittedIds = new Set(submissions.filter(s => s.weekStarting === currentWeek).map(s => s.teacherId));
+    const submittedIds = new Set(submissions.filter(s => s.weekStarting === nextWeek).map(s => s.teacherId));
     return teachers.filter(t => !submittedIds.has(t.id));
-  }, [teachers, submissions, currentWeek]);
+  }, [teachers, submissions, nextWeek]);
 
   const defaultersByClass = useMemo(() => {
     const res: Record<string, Teacher[]> = {};
@@ -41,12 +41,12 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
 
   const handleGlobalReminders = async () => {
     if (missingTeachers.length === 0) {
-      alert("Excellent! All teachers have submitted their plans for this week.");
+      alert("Excellent! All teachers have submitted plans for next week.");
       return;
     }
     setIsProcessing('reminders');
     const list = missingTeachers.map(t => ({ name: t.name, email: t.email }));
-    await onSendWarnings(list);
+    await onSendWarnings(list, nextWeek);
     setIsProcessing(null);
   };
 
@@ -63,7 +63,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
       const classTeacher = teachers.find(t => t.isClassTeacher?.classLevel === cls.level && t.isClassTeacher?.section === cls.sec);
       if (!classTeacher) continue;
 
-      const relevantSubmissions = submissions.filter(s => s.weekStarting === currentWeek).flatMap(s => 
+      const relevantSubmissions = submissions.filter(s => s.weekStarting === nextWeek).flatMap(s => 
         s.plans.filter(p => p.classLevel === cls.level && p.section === cls.sec).map(p => ({
           ...p,
           teacherName: s.teacherName
@@ -76,10 +76,10 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
           email: classTeacher.email, 
           classLevel: cls.level, 
           section: cls.sec 
-        }, currentWeek, "Saturday");
+        }, nextWeek, "Saturday");
         
         const pdfBase64 = doc.output('datauristring');
-        await onSendPdf(pdfBase64, classTeacher.email, `${cls.level}-${cls.sec}`, `Syllabus_${cls.level}${cls.sec}_${currentWeek}.pdf`);
+        await onSendPdf(pdfBase64, classTeacher.email, `${cls.level}-${cls.sec}`, `Syllabus_${cls.level}${cls.sec}_${nextWeek}.pdf`);
         sentCount++;
       }
     }
@@ -88,7 +88,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
   };
 
   const handleManualCompiledPDF = (classLevel: ClassLevel, section: Section, emailMode: boolean = false) => {
-    const relevantSubmissions = submissions.filter(s => s.weekStarting === currentWeek).flatMap(s => 
+    const relevantSubmissions = submissions.filter(s => s.weekStarting === nextWeek).flatMap(s => 
       s.plans.filter(p => p.classLevel === classLevel && p.section === section).map(p => ({
         ...p,
         teacherName: s.teacherName
@@ -100,13 +100,13 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
       return;
     }
 
-    const doc = generateSyllabusPDF(relevantSubmissions, { name: 'Admin Office', email: ADMIN_EMAIL, classLevel, section }, currentWeek, "Saturday");
+    const doc = generateSyllabusPDF(relevantSubmissions, { name: 'Admin Office', email: ADMIN_EMAIL, classLevel, section }, nextWeek, "Saturday");
     
     if (emailMode) {
       const pdfBase64 = doc.output('datauristring');
       onSendPdf(pdfBase64, ADMIN_EMAIL, `${classLevel}-${section}`, `AdminCompiled_${classLevel}${section}.pdf`);
     } else {
-      doc.save(`Compiled_${classLevel}${section}_${currentWeek}.pdf`);
+      doc.save(`Compiled_${classLevel}${section}_${nextWeek}.pdf`);
     }
   };
 
@@ -127,7 +127,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
             className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-xs shadow-xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-95 disabled:opacity-50"
            >
              {isProcessing === 'reminders' ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-bell"></i>}
-             <span>Send Reminders</span>
+             <span>Send Reminders (Next Week)</span>
            </button>
            <button 
             onClick={handleGlobalEmailCompilation}
@@ -135,7 +135,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-black text-xs shadow-xl shadow-indigo-100 flex items-center gap-3 transition-all active:scale-95 disabled:opacity-50"
            >
              {isProcessing === 'emails' ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-paper-plane"></i>}
-             <span>Send Email</span>
+             <span>Email Compiled Plans</span>
            </button>
            <button onClick={() => setActiveTab('settings')} className="bg-gray-900 hover:bg-black text-white px-8 py-4 rounded-2xl font-black text-xs shadow-xl flex items-center gap-3 transition-all active:scale-95">
              <i className="fas fa-sliders"></i>
@@ -162,8 +162,8 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
           {activeTab === 'monitor' && (
             <div className="space-y-12">
               <div className="flex items-center justify-between">
-                <h3 className="text-2xl font-black text-gray-800">Defaulter Status <span className="text-gray-300 ml-2 font-medium">| {currentWeek}</span></h3>
-                <div className="px-5 py-2 bg-blue-50 text-blue-600 rounded-full font-black text-[10px] uppercase tracking-widest">{missingTeachers.length} Pending Submission</div>
+                <h3 className="text-2xl font-black text-gray-800">Pending Submissions for Upcoming Week <span className="text-gray-300 ml-2 font-medium">| Starting: {nextWeek}</span></h3>
+                <div className="px-5 py-2 bg-blue-50 text-blue-600 rounded-full font-black text-[10px] uppercase tracking-widest">{missingTeachers.length} Pending</div>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -181,7 +181,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                         <div key={t.id} className="flex items-center justify-between group/row">
                           <span className="text-xs font-bold text-gray-600">{t.name}</span>
                           <button 
-                            onClick={() => onSendWarnings([{name: t.name, email: t.email}])} 
+                            onClick={() => onSendWarnings([{name: t.name, email: t.email}], nextWeek)} 
                             className="text-[8px] font-black text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-3 py-1 rounded-lg uppercase tracking-widest transition-all"
                           >
                             Warn

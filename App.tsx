@@ -4,7 +4,7 @@ import { Teacher, WeeklySubmission, ClassLevel, Section, Submission } from './ty
 import Login from './components/Login';
 import TeacherDashboard from './components/TeacherDashboard';
 import AdminDashboard from './components/AdminDashboard';
-import { SCHOOL_NAME, INITIAL_TEACHERS, getCurrentWeekMonday, SCHOOL_LOGO_URL } from './constants';
+import { SCHOOL_NAME, INITIAL_TEACHERS, getCurrentWeekMonday, getNextWeekMonday, SCHOOL_LOGO_URL } from './constants';
 import { generateSyllabusPDF } from './services/pdfService';
 
 const App: React.FC = () => {
@@ -62,18 +62,19 @@ const App: React.FC = () => {
     const day = now.getDay();
     const hour = now.getHours();
     const dateStr = now.toISOString().split('T')[0];
-    const monday = getCurrentWeekMonday();
+    const nextMonday = getNextWeekMonday();
 
+    // Auto-reminders run on Thursday, Friday, Saturday at 2 PM for the upcoming week
     if ([4, 5, 6].includes(day) && hour === 14) {
       const runKey = `auto_remind_${dateStr}`;
       if (!localStorage.getItem(runKey) && syncUrlRef.current) {
-        const submittedIds = new Set(submissionsRef.current.filter(s => s.weekStarting === monday).map(s => s.teacherId));
+        const submittedIds = new Set(submissionsRef.current.filter(s => s.weekStarting === nextMonday).map(s => s.teacherId));
         const defaulters = teachersRef.current
           .filter(t => !submittedIds.has(t.id))
           .map(t => ({ name: t.name, email: t.email }));
 
         if (defaulters.length > 0) {
-          triggerWarningEmails(defaulters, true);
+          triggerWarningEmails(defaulters, nextMonday, true);
         }
         localStorage.setItem(runKey, 'true');
       }
@@ -82,7 +83,7 @@ const App: React.FC = () => {
     if (day === 6 && hour === 21) {
       const runKey = `auto_compile_${dateStr}`;
       if (!localStorage.getItem(runKey) && syncUrlRef.current) {
-        runAutomatedCompilation(monday);
+        runAutomatedCompilation(nextMonday);
         localStorage.setItem(runKey, 'true');
       }
     }
@@ -173,9 +174,13 @@ const App: React.FC = () => {
     }
   };
 
-  const triggerWarningEmails = async (defaulters: { name: string, email: string }[], isAuto = false) => {
+  const triggerWarningEmails = async (defaulters: { name: string, email: string }[], weekStarting?: string, isAuto = false) => {
     const url = syncUrl || syncUrlRef.current;
-    if (!url) return;
+    if (!url) {
+      if (!isAuto) alert("Cloud Sync is not configured. Admin must set the Deployment URL first.");
+      return;
+    }
+    const week = weekStarting || getNextWeekMonday();
     try {
       await fetch(url, {
         method: 'POST',
@@ -184,13 +189,13 @@ const App: React.FC = () => {
         body: JSON.stringify({ 
           action: 'SEND_WARNINGS', 
           defaulters, 
-          weekStarting: getCurrentWeekMonday(),
+          weekStarting: week,
           isAuto
         })
       });
-      if (!isAuto) alert(`Warning emails dispatched to ${defaulters.length} teachers.`);
+      if (!isAuto) alert(`Warning emails dispatched to ${defaulters.length} teachers for the week of ${week}.`);
     } catch (err) {
-      if (!isAuto) alert("Failed to send warnings.");
+      if (!isAuto) alert("Failed to connect to the automation backend.");
     }
   };
 
@@ -208,12 +213,13 @@ const App: React.FC = () => {
           recipient, 
           className, 
           filename,
-          isAuto
+          isAuto,
+          weekStarting: getNextWeekMonday()
         })
       });
       if (!isAuto) alert(`Compiled PDF successfully emailed to ${recipient}`);
     } catch (err) {
-      if (!isAuto) console.error("Auto compilation email failed for", recipient);
+      if (!isAuto) console.error("Email dispatch failed for", recipient);
     }
   };
 

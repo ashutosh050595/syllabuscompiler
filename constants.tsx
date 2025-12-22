@@ -21,6 +21,17 @@ export const getCurrentWeekMonday = () => {
   return monday.toISOString().split('T')[0];
 };
 
+export const getNextWeekMonday = () => {
+  const d = new Date();
+  const day = d.getDay();
+  // Calculate days until next Monday (day 1)
+  // If today is Monday(1), next Monday is 7 days away
+  const daysUntilNextMonday = (1 - day + 7) % 7 || 7;
+  const nextMonday = new Date(d.setDate(d.getDate() + daysUntilNextMonday));
+  nextMonday.setHours(0, 0, 0, 0);
+  return nextMonday.toISOString().split('T')[0];
+};
+
 export const INITIAL_TEACHERS: Teacher[] = [
   { 
     id: 'kishor-kunal', 

@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Teacher, WeeklySubmission, ClassPlan, Submission, Section, ClassLevel } from '../types';
-import { getCurrentWeekMonday, CLASS_STYLES, INITIAL_TEACHERS } from '../constants';
+import { getNextWeekMonday, CLASS_STYLES, INITIAL_TEACHERS } from '../constants';
 import { refineSyllabusContent } from '../services/geminiService';
 import { generateSyllabusPDF } from '../services/pdfService';
 
@@ -11,7 +11,7 @@ interface Props {
   setSubmissions: (s: WeeklySubmission[]) => void;
   allSubmissions: WeeklySubmission[];
   isCloudEnabled: boolean;
-  onSendWarnings: (defaulters: {name: string, email: string}[]) => void;
+  onSendWarnings: (defaulters: {name: string, email: string}[], weekStarting: string) => void;
   onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => void;
 }
 
@@ -23,15 +23,14 @@ interface GroupedAssignment {
 }
 
 const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmissions, allSubmissions, isCloudEnabled, onSendWarnings, onSendPdf }) => {
-  const currentWeek = getCurrentWeekMonday();
+  const nextWeek = getNextWeekMonday();
   const [view, setView] = useState<'status' | 'form' | 'history'>('status');
-  const [isSyncing, setIsSyncing] = useState(false);
   
-  const saturday = new Date(currentWeek);
+  const saturday = new Date(nextWeek);
   saturday.setDate(saturday.getDate() + 5);
   const saturdayStr = saturday.toISOString().split('T')[0];
 
-  const currentSubmission = submissions.find(s => s.teacherId === teacher.id && s.weekStarting === currentWeek);
+  const currentSubmission = submissions.find(s => s.teacherId === teacher.id && s.weekStarting === nextWeek);
 
   const groupedAssignments = useMemo(() => {
     const groups: Record<string, GroupedAssignment> = {};
@@ -61,15 +60,15 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
     return requirements.map(req => {
       const sub = allSubmissions.find(s => 
         s.teacherId === req.teacherId && 
-        s.weekStarting === currentWeek &&
+        s.weekStarting === nextWeek &&
         s.plans.some(p => p.classLevel === classLevel && p.section === section && p.subject === req.subject)
       );
       return { ...req, submitted: !!sub };
     });
-  }, [teacher.isClassTeacher, allSubmissions, currentWeek]);
+  }, [teacher.isClassTeacher, allSubmissions, nextWeek]);
 
   const [formData, setFormData] = useState<Record<string, { chapter: string, topics: string, homework: string }>>({});
-  const [dates, setDates] = useState({ from: currentWeek, to: saturdayStr });
+  const [dates, setDates] = useState({ from: nextWeek, to: saturdayStr });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiLoading, setAiLoading] = useState<string | null>(null);
 
@@ -106,7 +105,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
       weekStarting: dates.from, plans: flattenedPlans, timestamp: new Date().toISOString()
     };
     setTimeout(() => {
-      const filtered = submissions.filter(s => !(s.teacherId === teacher.id && s.weekStarting === currentWeek));
+      const filtered = submissions.filter(s => !(s.teacherId === teacher.id && s.weekStarting === nextWeek));
       setSubmissions([...filtered, newSubmission]);
       setIsSubmitting(false);
       setView('status');
@@ -117,17 +116,17 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
     if (!classStatus) return;
     const defaulters = classStatus.filter(s => !s.submitted).map(s => ({ name: s.teacherName, email: s.email }));
     if (defaulters.length === 0) {
-      alert("All teachers have submitted for your class!");
+      alert("Excellent! All teachers have submitted plans for your class for next week.");
       return;
     }
-    onSendWarnings(defaulters);
+    onSendWarnings(defaulters, nextWeek);
   };
 
   const handleMailCompiled = () => {
     if (!teacher.isClassTeacher || !classStatus) return;
     const { classLevel, section } = teacher.isClassTeacher;
     const compiledPlans: Submission[] = classStatus.map(req => {
-      const teacherSub = allSubmissions.find(s => s.teacherId === req.teacherId && s.weekStarting === currentWeek);
+      const teacherSub = allSubmissions.find(s => s.teacherId === req.teacherId && s.weekStarting === nextWeek);
       const plan = teacherSub?.plans.find(p => p.classLevel === classLevel && p.section === section && p.subject === req.subject);
       return {
         subject: req.subject, teacherName: req.teacherName,
@@ -139,7 +138,15 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
     });
     const doc = generateSyllabusPDF(compiledPlans, { name: teacher.name, email: teacher.email, classLevel, section }, dates.from, dates.to);
     const pdfBase64 = doc.output('datauristring');
-    onSendPdf(pdfBase64, teacher.email, `${classLevel}-${section}`, `Compiled_${classLevel}${section}_${currentWeek}.pdf`);
+    onSendPdf(pdfBase64, teacher.email, `${classLevel}-${section}`, `Compiled_${classLevel}${section}_${nextWeek}.pdf`);
+  };
+
+  const handleWhatsAppShare = () => {
+    if (!teacher.isClassTeacher || !classStatus) return;
+    const { classLevel, section } = teacher.isClassTeacher;
+    const message = `Hello, the Compiled Weekly Syllabus for Class ${classLevel}-${section} (Starting: ${nextWeek}) has been generated and emailed. Please check your inbox for details.`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
   };
 
   return (
@@ -174,15 +181,18 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
                 <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-gray-100 relative overflow-hidden">
                   <div className="flex justify-between items-center mb-8 relative z-10">
                     <div>
-                        <h3 className="text-2xl font-black text-gray-800">Class {teacher.isClassTeacher.classLevel}-{teacher.isClassTeacher.section} In-Charge</h3>
-                        <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest mt-1">Automated Operations</p>
+                        <h3 className="text-2xl font-black text-gray-800">Class {teacher.isClassTeacher.classLevel}-{teacher.isClassTeacher.section} Status</h3>
+                        <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest mt-1">Monitoring for Week Beginning: {nextWeek}</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button onClick={handleMailCompiled} className="bg-gray-900 text-white px-5 py-2.5 rounded-xl text-[10px] font-black hover:bg-black flex items-center gap-2 transition-transform active:scale-95 shadow-lg">
                         <i className="fas fa-envelope"></i> Mail Compiled PDF
                       </button>
+                      <button onClick={handleWhatsAppShare} className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black hover:bg-emerald-700 flex items-center gap-2 transition-transform active:scale-95 shadow-lg shadow-emerald-100">
+                        <i className="fab fa-whatsapp"></i> WhatsApp PDF Link
+                      </button>
                       <button onClick={handleWarnDefaulters} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black hover:bg-blue-700 flex items-center gap-2 transition-transform active:scale-95 shadow-lg shadow-blue-100">
-                        <i className="fas fa-bullhorn"></i> Send Manual Warnings
+                        <i className="fas fa-bullhorn"></i> Warn Defaulters
                       </button>
                     </div>
                   </div>
@@ -202,7 +212,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
               )}
 
               <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-gray-100">
-                <h3 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">My Weekly Assignments</h3>
+                <h3 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">My Assignments for Next Week</h3>
                 <div className="space-y-4">
                   {groupedAssignments.map(g => {
                     const isDone = currentSubmission?.plans.some(p => p.subject === g.subject && p.classLevel === g.classLevel);
@@ -254,7 +264,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
           <div className="bg-gray-800 p-12 text-white flex justify-between items-center">
              <div>
                <h3 className="text-4xl font-black tracking-tight">Academic Planning</h3>
-               <p className="text-gray-400 font-bold text-sm mt-2 uppercase tracking-widest">{isCloudEnabled ? 'Cloud Sync Verified' : 'Local Archive'}</p>
+               <p className="text-gray-400 font-bold text-sm mt-2 uppercase tracking-widest">Planning for Week Starting: {nextWeek}</p>
              </div>
              <button type="button" onClick={() => setView('status')} className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"><i className="fas fa-times text-xl"></i></button>
           </div>
@@ -262,11 +272,11 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
           <div className="p-12 space-y-16">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Date (From) *</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Date (From - Monday) *</label>
                   <input type="date" required className="w-full px-8 py-5 rounded-2xl bg-gray-50 border-gray-100 border outline-none font-bold" value={dates.from} onChange={e => setDates({...dates, from: e.target.value})} />
                </div>
                <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Date (To) *</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Date (To - Saturday) *</label>
                   <input type="date" required className="w-full px-8 py-5 rounded-2xl bg-gray-50 border-gray-100 border outline-none font-bold" value={dates.to} onChange={e => setDates({...dates, to: e.target.value})} />
                </div>
             </div>
