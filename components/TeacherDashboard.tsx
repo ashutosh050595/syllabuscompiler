@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Teacher, WeeklySubmission, ClassPlan, Submission, Section, ClassLevel } from '../types';
+import { Teacher, WeeklySubmission, ClassPlan, Submission, Section, ClassLevel, ResubmitRequest } from '../types';
 import { getNextWeekMonday, CLASS_STYLES, PORTAL_LINK, getWhatsAppLink } from '../constants';
 import { refineSyllabusContent } from '../services/geminiService';
 import { generateSyllabusPDF } from '../services/pdfService';
@@ -16,6 +16,8 @@ interface Props {
   setSyncUrl: (url: string) => void;
   onSendWarnings: (defaulters: {name: string, email: string}[], weekStarting: string) => void;
   onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => Promise<any>;
+  onResubmitRequest: (req: ResubmitRequest) => void;
+  resubmitRequests: ResubmitRequest[];
 }
 
 interface GroupedAssignment {
@@ -25,17 +27,19 @@ interface GroupedAssignment {
   sections: Section[];
 }
 
-const TeacherDashboard: React.FC<Props> = ({ teacher, teachers, submissions, setSubmissions, allSubmissions, isCloudEnabled, syncUrl, setSyncUrl, onSendWarnings, onSendPdf }) => {
+const TeacherDashboard: React.FC<Props> = ({ teacher, teachers, submissions, setSubmissions, allSubmissions, isCloudEnabled, syncUrl, setSyncUrl, onSendWarnings, onSendPdf, onResubmitRequest, resubmitRequests }) => {
   const nextWeek = getNextWeekMonday();
   const [view, setView] = useState<'status' | 'form' | 'history'>('status');
   const [isMailing, setIsMailing] = useState(false);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+  const [resubmitStatus, setResubmitStatus] = useState<{ requested: boolean, error: string }>({ requested: false, error: '' });
   
   const saturday = new Date(nextWeek);
   saturday.setDate(saturday.getDate() + 5);
   const saturdayStr = saturday.toISOString().split('T')[0];
 
   const currentSubmission = submissions.find(s => s.teacherId === teacher.id && s.weekStarting === nextWeek);
+  const hasPendingRequest = resubmitRequests.some(r => r.teacherId === teacher.id && r.weekStarting === nextWeek && r.status === 'pending');
 
   const myHistory = useMemo(() => {
     return submissions
@@ -100,6 +104,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, teachers, submissions, set
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentSubmission) return; // Guard clause
     setIsSubmitting(true);
     const flattenedPlans: ClassPlan[] = [];
     groupedAssignments.forEach(g => {
@@ -121,6 +126,20 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, teachers, submissions, set
       setIsSubmitting(false);
       setView('status');
     }, 1200);
+  };
+
+  const handleRequestResubmitAction = () => {
+    const req: ResubmitRequest = {
+      id: crypto.randomUUID(),
+      teacherId: teacher.id,
+      teacherName: teacher.name,
+      teacherEmail: teacher.email,
+      weekStarting: nextWeek,
+      timestamp: new Date().toISOString(),
+      status: 'pending'
+    };
+    onResubmitRequest(req);
+    setResubmitStatus({ requested: true, error: '' });
   };
 
   const handleWarnDefaulters = () => {
@@ -263,56 +282,90 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, teachers, submissions, set
       )}
 
       {view === 'form' && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-gray-100 animate-in slide-in-from-bottom-4">
-          <div className="bg-gray-800 p-8 md:p-12 text-white flex justify-between items-center">
-             <h3 className="text-2xl md:text-3xl font-black tracking-tight">Planning</h3>
-             <button type="button" onClick={() => setView('status')} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"><i className="fas fa-times"></i></button>
-          </div>
-
-          <div className="p-6 md:p-12 space-y-12">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-               <div className="space-y-2">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Monday Date</label>
-                  <input type="date" required className="w-full px-6 py-4 rounded-xl bg-gray-50 border-gray-100 border outline-none font-bold" value={dates.from} onChange={e => setDates({...dates, from: e.target.value})} />
+        <div className="space-y-8 animate-in slide-in-from-bottom-4">
+          {currentSubmission ? (
+            <div className="bg-white rounded-[3rem] p-12 shadow-2xl border-4 border-amber-100 text-center space-y-8">
+               <div className="w-24 h-24 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto text-4xl">
+                  <i className="fas fa-exclamation-triangle"></i>
                </div>
-               <div className="space-y-2">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Saturday Date</label>
-                  <input type="date" required className="w-full px-6 py-4 rounded-xl bg-gray-50 border-gray-100 border outline-none font-bold" value={dates.to} onChange={e => setDates({...dates, to: e.target.value})} />
+               <div className="space-y-4">
+                  <h3 className="text-3xl font-black text-gray-800">Plan Already Submitted</h3>
+                  <p className="text-gray-500 font-medium max-w-md mx-auto leading-relaxed">
+                    Lesson plan for the week <b>{nextWeek}</b> has already been submitted. 
+                    School policy allows only one submission per week to maintain record integrity.
+                  </p>
+                  <p className="text-sm text-red-500 font-bold uppercase tracking-widest">
+                    To resubmit, please request permission from the administrator.
+                  </p>
                </div>
-            </div>
-
-            <div className="space-y-10">
-               {groupedAssignments.map((g) => (
-                 <div key={g.id} className="pl-4 md:pl-10 border-l-4 border-blue-500 space-y-6">
-                    <h4 className="text-xl md:text-2xl font-black text-gray-800">{g.subject} <span className="text-xs text-gray-400">({g.classLevel}-{g.sections.join(',')})</span></h4>
-                    <div className="space-y-5">
-                       <input required type="text" className="w-full px-6 py-4 rounded-xl bg-gray-50 border-gray-100 border outline-none font-bold text-sm" placeholder="Chapter Name" value={formData[g.id]?.chapter || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], chapter: e.target.value } })} />
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="space-y-2">
-                             <div className="flex justify-between px-1">
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Topics</label>
-                                <button type="button" onClick={() => handleRefine(g.id, 'topics')} className="text-[8px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-full uppercase">AI Fix</button>
-                             </div>
-                             <textarea required rows={4} className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-gray-100 border outline-none text-xs font-medium" value={formData[g.id]?.topics || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], topics: e.target.value } })} />
-                          </div>
-                          <div className="space-y-2">
-                             <div className="flex justify-between px-1">
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Homework</label>
-                                <button type="button" onClick={() => handleRefine(g.id, 'homework')} className="text-[8px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-full uppercase">AI Fix</button>
-                             </div>
-                             <textarea required rows={4} className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-gray-100 border outline-none text-xs font-medium" value={formData[g.id]?.homework || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], homework: e.target.value } })} />
-                          </div>
-                       </div>
+               <div className="pt-6">
+                  {hasPendingRequest || resubmitStatus.requested ? (
+                    <div className="bg-blue-50 text-blue-600 p-6 rounded-3xl font-black uppercase tracking-widest text-xs border border-blue-100">
+                       <i className="fas fa-clock mr-2"></i> Request Pending Admin Approval
                     </div>
-                 </div>
-               ))}
+                  ) : (
+                    <button 
+                      onClick={handleRequestResubmitAction}
+                      className="bg-gray-900 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all shadow-xl"
+                    >
+                      Request Permission to Resubmit
+                    </button>
+                  )}
+               </div>
             </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-gray-100">
+              <div className="bg-gray-800 p-8 md:p-12 text-white flex justify-between items-center">
+                 <h3 className="text-2xl md:text-3xl font-black tracking-tight">Planning</h3>
+                 <button type="button" onClick={() => setView('status')} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"><i className="fas fa-times"></i></button>
+              </div>
 
-            <button disabled={isSubmitting} className="w-full bg-blue-600 text-white font-black py-6 rounded-2xl shadow-xl text-lg flex items-center justify-center gap-4">
-              {isSubmitting ? <i className="fas fa-spinner fa-spin"></i> : <span>Finalize & Sync Plan</span>}
-            </button>
-          </div>
-        </form>
+              <div className="p-6 md:p-12 space-y-12">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+                   <div className="space-y-2">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Monday Date</label>
+                      <input type="date" required className="w-full px-6 py-4 rounded-xl bg-gray-50 border-gray-100 border outline-none font-bold" value={dates.from} onChange={e => setDates({...dates, from: e.target.value})} />
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Saturday Date</label>
+                      <input type="date" required className="w-full px-6 py-4 rounded-xl bg-gray-50 border-gray-100 border outline-none font-bold" value={dates.to} onChange={e => setDates({...dates, to: e.target.value})} />
+                   </div>
+                </div>
+
+                <div className="space-y-10">
+                   {groupedAssignments.map((g) => (
+                     <div key={g.id} className="pl-4 md:pl-10 border-l-4 border-blue-500 space-y-6">
+                        <h4 className="text-xl md:text-2xl font-black text-gray-800">{g.subject} <span className="text-xs text-gray-400">({g.classLevel}-{g.sections.join(',')})</span></h4>
+                        <div className="space-y-5">
+                           <input required type="text" className="w-full px-6 py-4 rounded-xl bg-gray-50 border-gray-100 border outline-none font-bold text-sm" placeholder="Chapter Name" value={formData[g.id]?.chapter || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], chapter: e.target.value } })} />
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="space-y-2">
+                                 <div className="flex justify-between px-1">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Topics</label>
+                                    <button type="button" onClick={() => handleRefine(g.id, 'topics')} className="text-[8px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-full uppercase">AI Fix</button>
+                                 </div>
+                                 <textarea required rows={4} className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-gray-100 border outline-none text-xs font-medium" value={formData[g.id]?.topics || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], topics: e.target.value } })} />
+                              </div>
+                              <div className="space-y-2">
+                                 <div className="flex justify-between px-1">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Homework</label>
+                                    <button type="button" onClick={() => handleRefine(g.id, 'homework')} className="text-[8px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-full uppercase">AI Fix</button>
+                                 </div>
+                                 <textarea required rows={4} className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-gray-100 border outline-none text-xs font-medium" value={formData[g.id]?.homework || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], homework: e.target.value } })} />
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                   ))}
+                </div>
+
+                <button disabled={isSubmitting} className="w-full bg-blue-600 text-white font-black py-6 rounded-2xl shadow-xl text-lg flex items-center justify-center gap-4">
+                  {isSubmitting ? <i className="fas fa-spinner fa-spin"></i> : <span>Finalize & Sync Plan</span>}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       )}
 
       {view === 'history' && (

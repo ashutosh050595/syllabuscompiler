@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Teacher, WeeklySubmission, ClassLevel, Section, Submission, AssignedClass } from '../types';
+import { Teacher, WeeklySubmission, ClassLevel, Section, Submission, AssignedClass, ResubmitRequest } from '../types';
 import { getNextWeekMonday, getWhatsAppLink, ALL_CLASSES, ALL_SECTIONS, SCHOOL_NAME } from '../constants';
 import { generateSyllabusPDF } from '../services/pdfService';
 
@@ -9,6 +9,8 @@ interface Props {
   setTeachers: (t: Teacher[]) => void;
   submissions: WeeklySubmission[];
   setSubmissions: (s: WeeklySubmission[]) => void;
+  resubmitRequests: ResubmitRequest[];
+  onApproveResubmit: (id: string) => void;
   syncUrl: string;
   setSyncUrl: (url: string) => void;
   onSendWarnings: (defaulters: {name: string, email: string}[], weekStarting: string) => Promise<boolean>;
@@ -25,8 +27,8 @@ interface BatchStatus {
   log: string[];
 }
 
-const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, syncUrl, onSendWarnings, onSendPdf }) => {
-  const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'archive'>('monitor');
+const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, onSendWarnings, onSendPdf }) => {
+  const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'requests' | 'archive'>('monitor');
   const [showInfoModal, setShowInfoModal] = useState(false);
   const nextWeek = getNextWeekMonday();
   const [showModal, setShowModal] = useState(false);
@@ -281,7 +283,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
 
       <div className="bg-white rounded-[3rem] shadow-2xl border border-gray-100 overflow-hidden">
         <div className="flex border-b border-gray-50 bg-gray-50/50">
-           {['monitor', 'registry', 'archive'].map(t => (
+           {['monitor', 'registry', 'requests', 'archive'].map(t => (
              <button key={t} onClick={() => setActiveTab(t as any)} className={`flex-1 py-6 text-[11px] font-black transition-all uppercase tracking-[0.25em] relative ${activeTab === t ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>
                {t} {activeTab === t && <span className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600"></span>}
              </button>
@@ -370,6 +372,42 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
             </div>
           )}
 
+          {activeTab === 'requests' && (
+            <div className="space-y-10">
+               <h3 className="text-2xl font-black text-gray-800 tracking-tight">Resubmission Requests</h3>
+               {resubmitRequests.filter(r => r.status === 'pending').length > 0 ? (
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                   {resubmitRequests.filter(r => r.status === 'pending').map(req => (
+                     <div key={req.id} className="bg-white border-2 border-amber-50 p-8 rounded-[3rem] hover:border-amber-100 transition-all">
+                        <div className="flex justify-between items-start mb-4">
+                           <div>
+                              <h4 className="font-black text-gray-900 text-lg">{req.teacherName}</h4>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Requested on: {new Date(req.timestamp).toLocaleString()}</p>
+                           </div>
+                           <div className="w-10 h-10 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center"><i className="fas fa-undo"></i></div>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl mb-6">
+                           <p className="text-xs font-bold text-gray-600">Week Beginning</p>
+                           <p className="text-sm font-black text-gray-900">{req.weekStarting}</p>
+                        </div>
+                        <button 
+                          onClick={() => onApproveResubmit(req.id)}
+                          className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-emerald-100"
+                        >
+                          Approve Resubmission
+                        </button>
+                     </div>
+                   ))}
+                 </div>
+               ) : (
+                 <div className="text-center py-20 bg-gray-50 rounded-[3rem] border border-dashed border-gray-200">
+                    <i className="fas fa-check-double text-gray-200 text-6xl mb-4"></i>
+                    <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">No pending requests</p>
+                 </div>
+               )}
+            </div>
+          )}
+
           {activeTab === 'archive' && (
             <div className="text-center py-20">
               <i className="fas fa-box-archive text-gray-200 text-6xl mb-4"></i>
@@ -436,7 +474,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                 </div>
 
                 <div className="space-y-6">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Teaching Assignments</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Teaching Assignments</label>
                   <div className="bg-blue-50 p-6 rounded-3xl space-y-4">
                      <div className="grid grid-cols-3 gap-3">
                         <select className="px-4 py-3 rounded-xl bg-white border border-blue-100 font-bold text-xs" value={tempAssignment.classLevel} onChange={e => setTempAssignment({...tempAssignment, classLevel: e.target.value as ClassLevel})}>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Teacher, WeeklySubmission, ClassLevel, Section, Submission } from './types';
+import { Teacher, WeeklySubmission, ClassLevel, Section, Submission, ResubmitRequest } from './types';
 import Login from './components/Login';
 import TeacherDashboard from './components/TeacherDashboard';
 import AdminDashboard from './components/AdminDashboard';
@@ -10,6 +10,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<Teacher | { email: string; isAdmin: true } | null>(null);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [submissions, setSubmissions] = useState<WeeklySubmission[]>([]);
+  const [resubmitRequests, setResubmitRequests] = useState<ResubmitRequest[]>([]);
   const [syncUrl, setSyncUrl] = useState<string>('');
   const [logoLoaded, setLogoLoaded] = useState(true);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -22,6 +23,7 @@ const App: React.FC = () => {
       try {
         const savedTeachers = localStorage.getItem('sh_teachers_v4');
         const savedSubmissions = localStorage.getItem('sh_submissions_v2');
+        const savedRequests = localStorage.getItem('sh_resubmit_requests');
         const savedSyncUrl = localStorage.getItem('sh_sync_url');
         const savedUser = sessionStorage.getItem('sh_user');
         
@@ -43,6 +45,7 @@ const App: React.FC = () => {
         teachersRef.current = initialTeachers;
         
         setSubmissions(savedSubmissions ? JSON.parse(savedSubmissions) : []);
+        setResubmitRequests(savedRequests ? JSON.parse(savedRequests) : []);
 
         if (savedUser) {
           try {
@@ -65,11 +68,6 @@ const App: React.FC = () => {
     initialize();
   }, []);
 
-  /**
-   * Robust POST for Google Apps Script. 
-   * Uses text/plain to avoid preflight (OPTIONS) requests which are 
-   * often blocked by mobile browsers for cross-origin targets.
-   */
   const cloudPost = async (url: string, payload: any) => {
     if (!url || !url.startsWith('http')) return false;
     try {
@@ -80,13 +78,56 @@ const App: React.FC = () => {
         mode: 'cors',
         redirect: 'follow'
       });
-      
-      // GAS usually redirects to a page without CORS headers, which can trigger a catch block
-      // even if the data was received. If the fetch succeeds, we assume transmission.
       return response.ok || response.status === 0 || response.type === 'opaque';
     } catch (err) {
-      console.debug("Note: Cloud request likely dispatched despite browser security warning.");
+      console.debug("Note: Cloud request dispatched despite browser warning.");
       return true; 
+    }
+  };
+
+  const updateSubmissions = async (newSubs: WeeklySubmission[]) => {
+    setSubmissions(newSubs);
+    localStorage.setItem('sh_submissions_v2', JSON.stringify(newSubs));
+
+    const latestSub = newSubs[newSubs.length - 1];
+    if (syncUrlRef.current && latestSub && syncUrlRef.current.startsWith('http')) {
+      await cloudPost(syncUrlRef.current, { ...latestSub, action: 'SUBMIT_PLAN' });
+    }
+  };
+
+  const handleRequestResubmit = async (req: ResubmitRequest) => {
+    const updated = [...resubmitRequests, req];
+    setResubmitRequests(updated);
+    localStorage.setItem('sh_resubmit_requests', JSON.stringify(updated));
+    if (syncUrlRef.current) {
+      await cloudPost(syncUrlRef.current, { ...req, action: 'REQUEST_RESUBMIT' });
+    }
+  };
+
+  const handleApproveResubmit = async (requestId: string) => {
+    const request = resubmitRequests.find(r => r.id === requestId);
+    if (!request) return;
+
+    // 1. Delete previous response
+    const filteredSubmissions = submissions.filter(s => 
+      !(s.teacherId === request.teacherId && s.weekStarting === request.weekStarting)
+    );
+    setSubmissions(filteredSubmissions);
+    localStorage.setItem('sh_submissions_v2', JSON.stringify(filteredSubmissions));
+
+    // 2. Remove request
+    const filteredRequests = resubmitRequests.filter(r => r.id !== requestId);
+    setResubmitRequests(filteredRequests);
+    localStorage.setItem('sh_resubmit_requests', JSON.stringify(filteredRequests));
+
+    // 3. Update Cloud & Send Confirmation Mail
+    if (syncUrlRef.current) {
+      await cloudPost(syncUrlRef.current, { 
+        action: 'APPROVE_RESUBMIT', 
+        teacherEmail: request.teacherEmail,
+        teacherName: request.teacherName,
+        weekStarting: request.weekStarting 
+      });
     }
   };
 
@@ -137,16 +178,6 @@ const App: React.FC = () => {
     syncUrlRef.current = url;
     localStorage.setItem('sh_sync_url', url);
     if (teachersRef.current.length > 0) syncRegistryToCloud(teachersRef.current);
-  };
-
-  const updateSubmissions = async (newSubs: WeeklySubmission[]) => {
-    setSubmissions(newSubs);
-    localStorage.setItem('sh_submissions_v2', JSON.stringify(newSubs));
-
-    const latestSub = newSubs[newSubs.length - 1];
-    if (syncUrlRef.current && latestSub && syncUrlRef.current.startsWith('http')) {
-      await cloudPost(syncUrlRef.current, { ...latestSub, action: 'SUBMIT_PLAN' });
-    }
   };
 
   const triggerWarningEmails = async (defaulters: { name: string, email: string }[], weekStarting?: string) => {
@@ -225,6 +256,7 @@ const App: React.FC = () => {
             <AdminDashboard 
               teachers={teachers} setTeachers={updateTeachers}
               submissions={submissions} setSubmissions={updateSubmissions}
+              resubmitRequests={resubmitRequests} onApproveResubmit={handleApproveResubmit}
               syncUrl={syncUrl} setSyncUrl={updateSyncUrl}
               onSendWarnings={triggerWarningEmails} onSendPdf={triggerCompiledPdfEmail}
             />
@@ -236,6 +268,8 @@ const App: React.FC = () => {
               allSubmissions={submissions} isCloudEnabled={!!syncUrl}
               syncUrl={syncUrl} setSyncUrl={updateSyncUrl}
               onSendWarnings={triggerWarningEmails} onSendPdf={triggerCompiledPdfEmail}
+              onResubmitRequest={handleRequestResubmit}
+              resubmitRequests={resubmitRequests}
             />
           )}
         </div>

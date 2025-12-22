@@ -1,6 +1,6 @@
 
 /**
- * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v3.3)
+ * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v3.5)
  * Professional Communication & Multi-Device Sync
  */
 
@@ -23,6 +23,8 @@ function doPost(e) {
     if (action === 'GET_REGISTRY') return handleGetRegistry();
     if (action === 'SEND_WARNINGS') return handleWarningEmails(data);
     if (action === 'SEND_COMPILED_PDF') return handlePdfDelivery(data);
+    if (action === 'REQUEST_RESUBMIT') return handleResubmitRequest(data);
+    if (action === 'APPROVE_RESUBMIT') return handleResubmitApproval(data);
 
     return jsonResponse("error", "Invalid Action");
   } catch (error) {
@@ -93,6 +95,41 @@ function handlePlanSubmission(data) {
     sheet.appendRow([new Date(), data.weekStarting, data.teacherName, data.teacherEmail, p.classLevel, p.section, p.subject, p.chapterName, p.topics, p.homework]);
   });
   return jsonResponse("success");
+}
+
+function handleResubmitRequest(data) {
+  // Logic to notify admin can be added here (e.g., logging to a hidden sheet or email)
+  return jsonResponse("success", "Request Logged");
+}
+
+function handleResubmitApproval(data) {
+  var subject = "Permission Granted: Weekly Syllabus Resubmission - " + data.weekStarting;
+  var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+    "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+    "<p>Dear " + data.teacherName + ",</p>" +
+    "<p>Your request for resubmitting the lesson plan for the week <b>" + data.weekStarting + "</b> has been <b>APPROVED</b> by the administrator.</p>" +
+    "<p>Your previous submission has been cleared. You can now log into the portal and submit your updated syllabus details:</p>" +
+    "<p style='text-align: center;'><a href='" + PORTAL_URL + "' style='background: #003399; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Open Syllabus Portal</a></p>" +
+    "<p>Please ensure the updated plan is synchronized as soon as possible.</p>" +
+    "<br><p>Best Regards,</p>" +
+    "<p><b>Academic Administration</b><br>Sacred Heart School</p>" +
+    "</div>";
+
+  GmailApp.sendEmail(data.teacherEmail, subject, "", {
+    name: "Sacred Heart School",
+    htmlBody: htmlBody
+  });
+  
+  // Optional: Code to actually delete rows from Submissions sheet matching email & week starting
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SUBMISSIONS_SHEET);
+  var rows = sheet.getDataRange().getValues();
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (rows[i][1] === data.weekStarting && rows[i][3].toLowerCase() === data.teacherEmail.toLowerCase()) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+
+  return jsonResponse("success", "Approval Sent & Data Cleared");
 }
 
 function handleWarningEmails(data) {

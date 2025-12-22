@@ -55,3 +55,13 @@ export interface ClassTeacherInfo {
   classLevel: ClassLevel;
   section: Section;
 }
+
+export interface ResubmitRequest {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  teacherEmail: string;
+  weekStarting: string;
+  timestamp: string;
+  status: 'pending' | 'approved';
+}
