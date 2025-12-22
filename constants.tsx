@@ -220,7 +220,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
   },
   { 
     id: 'ashutosh-gautam', 
-    email: 'ashutoshkumar.shs@gmail.com', 
+    email: 'gautam663@gmail.com', 
     name: 'Ashutosh Kumar Gautam', 
     whatsapp: '7004743875',
     assignedClasses: [
