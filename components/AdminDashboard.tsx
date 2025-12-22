@@ -111,8 +111,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
 
     for (let i = 0; i < missingTeachers.length; i++) {
       const t = missingTeachers[i];
-      // Explicitly type functional update to prevent inference issues
-      setBatchStatus((prev: BatchStatus) => ({ 
+      setBatchStatus(prev => ({ 
         ...prev, 
         current: i + 1, 
         currentName: t.name,
@@ -121,14 +120,14 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
       
       await onSendWarnings([{ name: t.name, email: t.email }], nextWeek);
       
-      setBatchStatus((prev: BatchStatus) => {
+      setBatchStatus(prev => {
         const newLog = [...prev.log];
         newLog[newLog.length - 1] = `✅ Sent to ${t.name}`;
         return { ...prev, log: newLog };
       });
     }
 
-    setBatchStatus((prev: BatchStatus) => ({ ...prev, isFinished: true, currentName: 'All Reminders Sent!' }));
+    setBatchStatus(prev => ({ ...prev, isFinished: true, currentName: 'All Reminders Sent!' }));
   };
 
   const handleGlobalEmailCompilation = async () => {
@@ -153,8 +152,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
 
     for (let i = 0; i < activeClasses.length; i++) {
       const cls = activeClasses[i];
-      // Explicitly type functional update to prevent inference issues
-      setBatchStatus((prev: BatchStatus) => ({ 
+      setBatchStatus(prev => ({ 
         ...prev, 
         current: i + 1, 
         currentName: `Class ${cls.level}-${cls.sec}`,
@@ -170,13 +168,13 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
         const pdfBase64 = doc.output('datauristring');
         await onSendPdf(pdfBase64, cls.teacher.email, `${cls.level}-${cls.sec}`, `Syllabus_${cls.level}${cls.sec}_${nextWeek}.pdf`);
         
-        setBatchStatus((prev: BatchStatus) => {
+        setBatchStatus(prev => {
           const newLog = [...prev.log];
           newLog[newLog.length - 1] = `✅ Emailed Class ${cls.level}-${cls.sec} to ${cls.teacher.name}`;
           return { ...prev, log: newLog };
         });
       } else {
-        setBatchStatus((prev: BatchStatus) => {
+        setBatchStatus(prev => {
           const newLog = [...prev.log];
           newLog[newLog.length - 1] = `⚠️ Skipped Class ${cls.level}-${cls.sec} (No submissions)`;
           return { ...prev, log: newLog };
@@ -184,7 +182,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
       }
     }
 
-    setBatchStatus((prev: BatchStatus) => ({ ...prev, isFinished: true, currentName: 'Batch Mail Complete!' }));
+    setBatchStatus(prev => ({ ...prev, isFinished: true, currentName: 'Batch Mail Complete!' }));
   };
 
   const handleSaveTeacher = () => {
@@ -245,8 +243,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
             </div>
             <div className="p-8 max-h-[250px] overflow-y-auto bg-white custom-scrollbar">
               <div className="space-y-3">
-                {/* Fixed TypeScript error by explicitly casting log to string array */}
-                {(batchStatus.log as string[]).map((entry, idx) => (
+                {batchStatus.log.map((entry, idx) => (
                   <div key={idx} className="flex items-center gap-3 text-xs font-bold text-gray-600">
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>{entry}
                   </div>
@@ -352,7 +349,8 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                          </td>
                          <td className="py-6">
                            <div className="flex flex-wrap gap-1">
-                             {Array.from(new Set(t.assignedClasses.map(ac => `${ac.classLevel}-${ac.section}`))).map(tag => (
+                             {/* FIX: Use spread operator for better type inference during Set-to-Array conversion to avoid "unknown" type error */}
+                             {[...new Set(t.assignedClasses.map(ac => `${ac.classLevel}-${ac.section}`))].map(tag => (
                                <span key={tag} className="text-[9px] font-black bg-white border border-gray-100 px-2 py-1 rounded-lg text-gray-600">{tag}</span>
                              ))}
                            </div>
