@@ -7,22 +7,20 @@ interface Props {
   onLogin: (user: Teacher | { email: string; isAdmin: true }) => void;
   teachers: Teacher[];
   onSyncRegistry: (url: string) => Promise<boolean>;
+  syncUrl: string;
 }
 
-const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry }) => {
+const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [error, setError] = useState('');
-  const [syncUrlInput, setSyncUrlInput] = useState('');
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [showSyncSetup, setShowSyncSetup] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [imgError, setImgError] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
     const cleanEmail = email.trim().toLowerCase();
 
     if (isAdminMode) {
@@ -31,28 +29,41 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry }) => {
       } else {
         setError('Invalid Admin credentials.');
       }
+      return;
+    }
+
+    // Attempt to find teacher locally
+    let teacher = teachers.find(t => t.email.toLowerCase() === cleanEmail);
+    
+    if (teacher) {
+      onLogin(teacher);
     } else {
-      const teacher = teachers.find(t => t.email.toLowerCase() === cleanEmail);
-      if (teacher) {
-        onLogin(teacher);
+      // If not found, attempt invisible cloud verify
+      if (syncUrl) {
+        setIsVerifying(true);
+        try {
+          const success = await onSyncRegistry(syncUrl);
+          if (success) {
+            // Need to reload or re-search the updated registry from local storage directly
+            // since the prop 'teachers' might not update instantly in this closure.
+            const freshRegistry = JSON.parse(localStorage.getItem('sh_teachers_v4') || '[]');
+            const freshTeacher = freshRegistry.find((t: any) => t.email.toLowerCase() === cleanEmail);
+            
+            if (freshTeacher) {
+              onLogin(freshTeacher);
+              return;
+            }
+          }
+          setError('Email not found in school records. Please check for typos.');
+        } catch (err) {
+          setError('Verification service unavailable. Please try again later.');
+        } finally {
+          setIsVerifying(false);
+        }
       } else {
-        setError('Teacher email not found. If you registered on another device, use the "Link Device" option below.');
+        setError('Teacher email not found. Contact administrator to activate portal.');
       }
     }
-  };
-
-  const handleCloudSync = async () => {
-    if (!syncUrlInput) return;
-    setIsSyncing(true);
-    setError('');
-    const success = await onSyncRegistry(syncUrlInput);
-    if (success) {
-      setShowSyncSetup(false);
-      alert("Device successfully linked! You can now log in.");
-    } else {
-      setError("Failed to fetch registry. Ensure the URL is correct and script is deployed.");
-    }
-    setIsSyncing(false);
   };
 
   return (
@@ -84,7 +95,7 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry }) => {
 
         <form onSubmit={handleLogin} className="p-8 md:p-12 space-y-6 md:space-y-8">
           {error && (
-            <div className="p-4 bg-red-50 border border-red-200 text-red-600 text-xs rounded-2xl flex items-center space-x-3">
+            <div className="p-4 bg-red-50 border border-red-200 text-red-600 text-xs rounded-2xl flex items-center space-x-3 animate-in shake-in-1">
               <i className="fas fa-triangle-exclamation"></i>
               <span className="font-bold">{error}</span>
             </div>
@@ -92,14 +103,15 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry }) => {
 
           <div className="space-y-5">
             <div>
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Verified Email</label>
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Official Email Address</label>
               <div className="relative group">
                 <i className="fas fa-at absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors"></i>
                 <input
                   type="email"
                   required
-                  className="w-full pl-14 pr-6 py-4 md:py-5 rounded-2xl border border-gray-100 bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-gray-700"
-                  placeholder="e.g. teacher@shs.com"
+                  disabled={isVerifying}
+                  className="w-full pl-14 pr-6 py-4 md:py-5 rounded-2xl border border-gray-100 bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-gray-700 disabled:opacity-50"
+                  placeholder="teacher@shs.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                 />
@@ -126,44 +138,25 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry }) => {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 md:py-5 px-8 rounded-2xl shadow-xl transform active:scale-95 transition-all flex items-center justify-center space-x-3 text-base md:text-lg"
+            disabled={isVerifying}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 md:py-5 px-8 rounded-2xl shadow-xl transform active:scale-95 transition-all flex items-center justify-center space-x-3 text-base md:text-lg disabled:bg-blue-400"
           >
-            <span>{isAdminMode ? 'Authenticate' : 'Enter Dashboard'}</span>
-            <i className="fas fa-chevron-right text-sm"></i>
+            {isVerifying ? (
+              <>
+                <i className="fas fa-spinner fa-spin"></i>
+                <span>Verifying with School Cloud...</span>
+              </>
+            ) : (
+              <>
+                <span>{isAdminMode ? 'Authenticate' : 'Enter Dashboard'}</span>
+                <i className="fas fa-chevron-right text-sm"></i>
+              </>
+            )}
           </button>
 
-          {!isAdminMode && (
-            <div className="pt-4 border-t border-gray-50 text-center">
-              <button 
-                type="button" 
-                onClick={() => setShowSyncSetup(!showSyncSetup)}
-                className="text-[10px] font-black text-blue-500 uppercase tracking-widest hover:underline"
-              >
-                {showSyncSetup ? 'Hide Link Settings' : 'Link Mobile Device to Cloud'}
-              </button>
-              
-              {showSyncSetup && (
-                <div className="mt-4 p-4 bg-blue-50 rounded-2xl space-y-3 animate-in fade-in slide-in-from-top-2">
-                  <p className="text-[9px] text-blue-600 font-bold uppercase">Paste Deployment URL to pull Registry</p>
-                  <input 
-                    type="url"
-                    placeholder="https://script.google.com/..."
-                    className="w-full px-4 py-3 rounded-xl text-xs font-bold border border-blue-200 outline-none"
-                    value={syncUrlInput}
-                    onChange={e => setSyncUrlInput(e.target.value)}
-                  />
-                  <button 
-                    type="button"
-                    disabled={isSyncing}
-                    onClick={handleCloudSync}
-                    className="w-full bg-blue-600 text-white py-3 rounded-xl text-[10px] font-black uppercase disabled:opacity-50"
-                  >
-                    {isSyncing ? 'Syncing...' : 'Sync Registry Now'}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+          <p className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">
+            New devices are automatically verified <br/> via the school database.
+          </p>
         </form>
       </div>
     </div>

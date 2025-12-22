@@ -6,6 +6,12 @@ export const SCHOOL_SUBTITLE = "(Affiliated to CBSE, New Delhi, upto +2 Level)";
 export const ADMIN_EMAIL = "admin@sacredheartkoderma.org";
 export const PORTAL_LINK = "https://syllabuscompiler-ruddy.vercel.app/";
 
+/** 
+ * HARDCODED BACKEND: Set this to your deployed Google Apps Script URL.
+ * This ensures new devices automatically connect without manual setup.
+ */
+export const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbwyU9YV_eW3J_r3p2jGz_v2G_J5J2_z5J2_z5J2/exec"; 
+
 export const SCHOOL_LOGO_URL = "logo.png"; 
 
 export const ALL_CLASSES: ClassLevel[] = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];

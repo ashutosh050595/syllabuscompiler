@@ -1,7 +1,7 @@
 
 /**
- * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v3.2)
- * 24/7 Autonomous Edition - Professional Communication & Multi-Device Sync
+ * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v3.3)
+ * Professional Communication & Multi-Device Sync
  */
 
 const ROOT_FOLDER_NAME = "Sacred Heart Syllabus Reports";
@@ -32,7 +32,6 @@ function doPost(e) {
   }
 }
 
-// Added GET handler for simpler device linking if needed, though doPost is preferred
 function doGet(e) {
   return handleGetRegistry();
 }
@@ -44,7 +43,7 @@ function handleGetRegistry() {
   var data = sheet.getDataRange().getValues();
   var teachers = [];
   for (var i = 1; i < data.length; i++) {
-    if (!data[i][0]) continue; // Skip empty rows
+    if (!data[i][0]) continue;
     teachers.push({
       id: data[i][0],
       name: data[i][1],
@@ -70,8 +69,6 @@ function ensureEnvironment() {
     var regHeaders = ["Teacher ID", "Name", "Email", "WhatsApp", "Assignments JSON", "Class Teacher Info JSON"];
     reg.getRange(1, 1, 1, regHeaders.length).setValues([regHeaders]).setBackground("#333333").setFontColor("#FFFFFF");
   }
-  var folders = DriveApp.getFoldersByName(ROOT_FOLDER_NAME);
-  if (!folders.hasNext()) DriveApp.createFolder(ROOT_FOLDER_NAME);
 }
 
 function handleSyncRegistry(data) {
@@ -101,14 +98,22 @@ function handlePlanSubmission(data) {
 function handleWarningEmails(data) {
   var portalLink = data.portalLink || PORTAL_URL;
   data.defaulters.forEach(function(t) {
-    var subject = "[URGENT] Weekly Syllabus Submission Required - " + data.weekStarting;
-    var body = "Dear " + t.name + ",\n\n" +
-      "This is a formal reminder regarding the submission of your weekly syllabus for the academic week beginning " + data.weekStarting + ". Our records indicate that your submission is currently pending.\n\n" +
-      "To ensure timely coordination and curriculum planning, please submit your lesson plan via the official portal:\n" +
-      portalLink + "\n\n" +
-      "Best Regards,\nCoordinator\nSacred Heart School";
+    var subject = "[URGENT] Academic Submission Required - Week: " + data.weekStarting;
+    var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+      "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+      "<p>Dear " + t.name + ",</p>" +
+      "<p>This is a formal reminder regarding the <b>Weekly Syllabus Submission</b> for the academic period beginning <b>" + data.weekStarting + "</b>.</p>" +
+      "<p>Our records indicate that your lesson plans for this period have not yet been synchronized with the central registry. To ensure seamless academic coordination, please finalize your submission via the portal:</p>" +
+      "<p style='text-align: center;'><a href='" + portalLink + "' style='background: #003399; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Open Syllabus Portal</a></p>" +
+      "<p>Your cooperation in maintaining academic timelines is highly appreciated.</p>" +
+      "<br><p>Best Regards,</p>" +
+      "<p><b>Coordinator</b><br>Sacred Heart School</p>" +
+      "</div>";
 
-    GmailApp.sendEmail(t.email, subject, body, { name: "Sacred Heart School" });
+    GmailApp.sendEmail(t.email, subject, "", {
+      name: "Sacred Heart School",
+      htmlBody: htmlBody
+    });
   });
   return jsonResponse("success");
 }
@@ -116,9 +121,21 @@ function handleWarningEmails(data) {
 function handlePdfDelivery(data) {
   var decoded = Utilities.base64Decode(data.pdfBase64.split(',')[1]);
   var blob = Utilities.newBlob(decoded, 'application/pdf', data.filename);
-  var body = "Dear Faculty Member,\n\nPlease find the attached compiled syllabus report for Class " + data.className + ".\n\nBest Regards,\nCoordinator\nSacred Heart School";
-  GmailApp.sendEmail(data.recipient, "[OFFICIAL] Compiled Weekly Syllabus - " + data.className, body, { 
+  
+  var subject = "[OFFICIAL] Compiled Weekly Syllabus - Class " + data.className;
+  var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+    "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+    "<p>Dear Faculty,</p>" +
+    "<p>Please find the attached <b>Official Compiled Syllabus Report</b> for <b>Class " + data.className + "</b> for the upcoming academic week.</p>" +
+    "<p>This document consolidates all subject plans for your reference and records. Should there be any discrepancies, please coordinate with the respective department heads immediately.</p>" +
+    "<p>Access the live dashboard here: <a href='" + PORTAL_URL + "'>Syllabus Portal</a></p>" +
+    "<br><p>Best Regards,</p>" +
+    "<p><b>Coordinator</b><br>Sacred Heart School</p>" +
+    "</div>";
+
+  GmailApp.sendEmail(data.recipient, subject, "", { 
     name: "Sacred Heart School",
+    htmlBody: htmlBody,
     attachments: [blob] 
   });
   return jsonResponse("success");
@@ -129,11 +146,4 @@ function jsonResponse(res, dataOrMsg) {
   if (typeof dataOrMsg === 'string') output.message = dataOrMsg;
   else Object.assign(output, dataOrMsg);
   return ContentService.createTextOutput(JSON.stringify(output)).setMimeType(ContentService.MimeType.JSON);
-}
-
-function getNextMondayStr() {
-  var d = new Date();
-  var diff = (1 - d.getDay() + 7) % 7 || 7;
-  var nextMon = new Date(d.setDate(d.getDate() + diff));
-  return nextMon.toISOString().split('T')[0];
 }

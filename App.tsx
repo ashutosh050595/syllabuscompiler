@@ -4,8 +4,7 @@ import { Teacher, WeeklySubmission, ClassLevel, Section, Submission } from './ty
 import Login from './components/Login';
 import TeacherDashboard from './components/TeacherDashboard';
 import AdminDashboard from './components/AdminDashboard';
-import { SCHOOL_NAME, INITIAL_TEACHERS, getCurrentWeekMonday, getNextWeekMonday, SCHOOL_LOGO_URL, PORTAL_LINK } from './constants';
-import { generateSyllabusPDF } from './services/pdfService';
+import { SCHOOL_NAME, INITIAL_TEACHERS, getCurrentWeekMonday, getNextWeekMonday, SCHOOL_LOGO_URL, PORTAL_LINK, DEFAULT_SYNC_URL } from './constants';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<Teacher | { email: string; isAdmin: true } | null>(null);
@@ -13,54 +12,69 @@ const App: React.FC = () => {
   const [submissions, setSubmissions] = useState<WeeklySubmission[]>([]);
   const [syncUrl, setSyncUrl] = useState<string>('');
   const [logoLoaded, setLogoLoaded] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);
   
   const teachersRef = useRef<Teacher[]>([]);
-  const submissionsRef = useRef<WeeklySubmission[]>([]);
   const syncUrlRef = useRef<string>('');
 
   useEffect(() => {
-    try {
-      const savedTeachers = localStorage.getItem('sh_teachers_v4');
-      const savedSubmissions = localStorage.getItem('sh_submissions_v2');
-      const savedSyncUrl = localStorage.getItem('sh_sync_url');
-      const savedUser = sessionStorage.getItem('sh_user');
-      
-      const initialTeachers = savedTeachers ? JSON.parse(savedTeachers) : INITIAL_TEACHERS;
-      const initialSubmissions = savedSubmissions ? JSON.parse(savedSubmissions) : [];
-      
-      setTeachers(initialTeachers);
-      teachersRef.current = initialTeachers;
-      
-      setSubmissions(initialSubmissions);
-      submissionsRef.current = initialSubmissions;
-      
-      if (savedSyncUrl) {
-        setSyncUrl(savedSyncUrl);
-        syncUrlRef.current = savedSyncUrl;
-      }
-
-      if (savedUser) {
-        try {
-          setUser(JSON.parse(savedUser));
-        } catch (e) {
-          sessionStorage.removeItem('sh_user');
+    const initialize = async () => {
+      try {
+        const savedTeachers = localStorage.getItem('sh_teachers_v4');
+        const savedSubmissions = localStorage.getItem('sh_submissions_v2');
+        const savedSyncUrl = localStorage.getItem('sh_sync_url');
+        const savedUser = sessionStorage.getItem('sh_user');
+        
+        const params = new URLSearchParams(window.location.search);
+        const urlParam = params.get('sync');
+        
+        let activeSyncUrl = urlParam || savedSyncUrl || DEFAULT_SYNC_URL;
+        
+        if (urlParam) {
+          window.history.replaceState({}, document.title, window.location.pathname);
         }
+
+        setSyncUrl(activeSyncUrl);
+        syncUrlRef.current = activeSyncUrl;
+        localStorage.setItem('sh_sync_url', activeSyncUrl);
+
+        const initialTeachers = savedTeachers ? JSON.parse(savedTeachers) : INITIAL_TEACHERS;
+        setTeachers(initialTeachers);
+        teachersRef.current = initialTeachers;
+        
+        setSubmissions(savedSubmissions ? JSON.parse(savedSubmissions) : []);
+
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser));
+          } catch (e) {
+            sessionStorage.removeItem('sh_user');
+          }
+        }
+
+        // Silent background sync
+        if (activeSyncUrl && activeSyncUrl.startsWith('http')) {
+          fetchRegistryFromCloud(activeSyncUrl);
+        }
+      } catch (error) {
+        console.error("Initialization error:", error);
+      } finally {
+        setIsInitializing(false);
       }
-    } catch (error) {
-      console.error("Failed to load local storage data:", error);
-      setTeachers(INITIAL_TEACHERS);
-      teachersRef.current = INITIAL_TEACHERS;
-    }
+    };
+
+    initialize();
   }, []);
 
   const syncRegistryToCloud = async (currentTeachers: Teacher[]) => {
     const url = syncUrlRef.current || syncUrl;
-    if (!url) return;
+    if (!url || !url.startsWith('http')) return;
     try {
+      // Use text/plain and mode: no-cors to avoid CORS preflight issues
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'SYNC_REGISTRY', teachers: currentTeachers })
       });
     } catch (err) {
@@ -69,26 +83,21 @@ const App: React.FC = () => {
   };
 
   const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
+    if (!url || !url.startsWith('http')) return false;
     try {
-      // We use a POST with GET_REGISTRY action to avoid CORS issues with simple GETs sometimes
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'GET_REGISTRY' })
-      });
+      // Use GET for fetching to avoid CORS 'Failed to fetch' issues on GAS.
+      // This hits the doGet(e) function in your Apps Script.
+      const response = await fetch(url); 
       const data = await response.json();
       if (data.result === 'success' && data.teachers) {
         setTeachers(data.teachers);
         teachersRef.current = data.teachers;
         localStorage.setItem('sh_teachers_v4', JSON.stringify(data.teachers));
-        setSyncUrl(url);
-        syncUrlRef.current = url;
-        localStorage.setItem('sh_sync_url', url);
         return true;
       }
       return false;
     } catch (err) {
-      console.error("Fetch Registry Error:", err);
+      console.debug("Cloud fetch unavailable:", err);
       return false;
     }
   };
@@ -119,16 +128,15 @@ const App: React.FC = () => {
 
   const updateSubmissions = async (newSubs: WeeklySubmission[]) => {
     setSubmissions(newSubs);
-    submissionsRef.current = newSubs;
     localStorage.setItem('sh_submissions_v2', JSON.stringify(newSubs));
 
     const latestSub = newSubs[newSubs.length - 1];
-    if (syncUrlRef.current && latestSub) {
+    if (syncUrlRef.current && latestSub && syncUrlRef.current.startsWith('http')) {
       try {
         await fetch(syncUrlRef.current, {
           method: 'POST',
           mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ ...latestSub, action: 'SUBMIT_PLAN' })
         });
       } catch (err) {
@@ -139,13 +147,13 @@ const App: React.FC = () => {
 
   const triggerWarningEmails = async (defaulters: { name: string, email: string }[], weekStarting?: string) => {
     const url = syncUrlRef.current || syncUrl;
-    if (!url) return false;
+    if (!url || !url.startsWith('http')) return false;
     const week = weekStarting || getNextWeekMonday();
     try {
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'SEND_WARNINGS', defaulters, weekStarting: week, portalLink: PORTAL_LINK })
       });
       return true;
@@ -157,12 +165,12 @@ const App: React.FC = () => {
 
   const triggerCompiledPdfEmail = async (pdfBase64: string, recipient: string, className: string, filename: string) => {
     const url = syncUrlRef.current || syncUrl;
-    if (!url) return;
+    if (!url || !url.startsWith('http')) return false;
     try {
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'SEND_COMPILED_PDF', pdfBase64, recipient, className, filename, weekStarting: getNextWeekMonday() })
       });
       return true;
@@ -171,6 +179,17 @@ const App: React.FC = () => {
       return false;
     }
   };
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-blue-600">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto"></div>
+          <p className="text-white font-black uppercase tracking-widest text-[10px]">Verifying School Connection...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
@@ -206,7 +225,12 @@ const App: React.FC = () => {
       <main className="flex-grow p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
           {!user ? (
-            <Login onLogin={handleLogin} teachers={teachers} onSyncRegistry={fetchRegistryFromCloud} />
+            <Login 
+              onLogin={handleLogin} 
+              teachers={teachers} 
+              onSyncRegistry={fetchRegistryFromCloud} 
+              syncUrl={syncUrl} 
+            />
           ) : 'isAdmin' in user ? (
             <AdminDashboard 
               teachers={teachers} setTeachers={updateTeachers}
