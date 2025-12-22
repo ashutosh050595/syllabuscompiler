@@ -61,11 +61,11 @@ function setupTriggers() {
       .atHour(14)
       .create();
 
-  // 2. Compilation Emails: Run every Saturday at 8 PM
+  // 2. Compilation Emails: Run every Saturday at 9 PM
   ScriptApp.newTrigger('autoSendCompilations')
       .timeBased()
       .onWeekDay(ScriptApp.WeekDay.SATURDAY)
-      .atHour(20)
+      .atHour(21)
       .create();
 }
 
@@ -143,6 +143,17 @@ function sendWarningEmail(name, email, weekStarting) {
 function autoSendCompilations() {
   var nextWeekMonday = getNextMondayDate();
   
+  // Calculate Week Range (Mon to Sat)
+  var startDate = new Date(nextWeekMonday);
+  var endDate = new Date(startDate);
+  endDate.setDate(startDate.getDate() + 5);
+  var endDateStr = Utilities.formatDate(endDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  var weekRange = nextWeekMonday + " to " + endDateStr;
+  
+  // Google Drive Setup
+  var folders = DriveApp.getFoldersByName(ROOT_FOLDER_NAME);
+  var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(ROOT_FOLDER_NAME);
+  
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var regSheet = ss.getSheetByName(REGISTRY_SHEET);
   var subSheet = ss.getSheetByName(SUBMISSIONS_SHEET);
@@ -151,7 +162,6 @@ function autoSendCompilations() {
   var subData = subSheet.getDataRange().getValues();
   
   // Parse Submissions
-  // [Timestamp, WeekStarting, TeacherName, TeacherEmail, Class, Section, Subject, Chapter, Topics, Homework]
   var submissions = [];
   for (var i = 1; i < subData.length; i++) {
     if (subData[i][1] === nextWeekMonday) {
@@ -171,7 +181,7 @@ function autoSendCompilations() {
   for (var i = 1; i < regData.length; i++) {
     var teacherName = regData[i][1];
     var teacherEmail = regData[i][2];
-    var classTeacherJson = regData[i][5]; // Column F
+    var classTeacherJson = regData[i][5];
 
     if (classTeacherJson) {
       try {
@@ -185,51 +195,87 @@ function autoSendCompilations() {
         });
 
         if (classPlans.length > 0) {
-          sendCompilationEmail(teacherName, teacherEmail, targetClass, targetSection, nextWeekMonday, classPlans);
+          // 1. Generate PDF
+          var pdfBlob = createSyllabusPDF(targetClass, targetSection, weekRange, teacherName, classPlans);
+          var fileName = "Class_" + targetClass + "_" + targetSection + "_" + nextWeekMonday + ".pdf";
+          pdfBlob.setName(fileName);
+          
+          // 2. Save to Drive
+          var file = folder.createFile(pdfBlob);
+          var fileUrl = file.getUrl();
+          
+          // 3. Send Email
+          sendFormalCompilationEmail(teacherName, teacherEmail, targetClass, targetSection, weekRange, fileUrl, pdfBlob, fileName);
         }
       } catch (e) {
-        console.error("Error parsing class teacher info for " + teacherName);
+        console.error("Error processing class teacher " + teacherName + ": " + e.toString());
       }
     }
   }
 }
 
-function sendCompilationEmail(name, email, classLevel, section, weekStarting, plans) {
-  var subject = "[AUTO-REPORT] Weekly Syllabus Summary: Class " + classLevel + "-" + section;
+function createSyllabusPDF(cls, sec, weekRange, teacherName, plans) {
+  var html = "<html><body style='font-family: Arial, sans-serif; padding: 20px;'>";
+  html += "<div style='text-align: center; margin-bottom: 20px;'>";
+  html += "<h1 style='color: #003399; margin: 0; font-size: 24px;'>SACRED HEART SCHOOL</h1>";
+  html += "<p style='margin: 5px 0; font-size: 12px; color: #555;'>(Affiliated to CBSE, New Delhi, upto +2 Level)</p>";
+  html += "<h2 style='margin-top: 15px; font-size: 18px; text-decoration: underline;'>WEEKLY SYLLABUS REPORT</h2>";
+  html += "</div>";
   
-  // Build HTML Table
-  var tableRows = plans.map(function(p) {
-    return "<tr>" +
-      "<td style='padding:8px; border:1px solid #ddd; font-weight:bold;'>" + p.subject + "</td>" +
-      "<td style='padding:8px; border:1px solid #ddd;'>" + p.teacherName + "</td>" +
-      "<td style='padding:8px; border:1px solid #ddd;'>" + p.chapter + "</td>" +
-      "<td style='padding:8px; border:1px solid #ddd; font-size:12px;'>" + p.topics + "</td>" +
-      "<td style='padding:8px; border:1px solid #ddd; font-size:12px;'>" + p.homework + "</td>" +
-      "</tr>";
-  }).join("");
+  html += "<div style='margin-bottom: 15px; font-size: 14px;'>";
+  html += "<p><b>Week:</b> " + weekRange + "</p>";
+  html += "<p><b>Class:</b> " + cls + " - " + sec + "</p>";
+  html += "<p><b>Class Teacher:</b> " + teacherName + "</p>";
+  html += "</div>";
+  
+  html += "<table style='width: 100%; border-collapse: collapse; border: 1px solid #000;'>";
+  html += "<tr style='background-color: #003399; color: white;'>";
+  html += "<th style='border: 1px solid #000; padding: 10px; font-size: 12px;'>SUBJECT</th>";
+  html += "<th style='border: 1px solid #000; padding: 10px; font-size: 12px;'>FACULTY</th>";
+  html += "<th style='border: 1px solid #000; padding: 10px; font-size: 12px;'>CHAPTER</th>";
+  html += "<th style='border: 1px solid #000; padding: 10px; font-size: 12px;'>TOPICS</th>";
+  html += "<th style='border: 1px solid #000; padding: 10px; font-size: 12px;'>HOMEWORK</th>";
+  html += "</tr>";
+  
+  for (var i = 0; i < plans.length; i++) {
+    var p = plans[i];
+    html += "<tr>";
+    html += "<td style='border: 1px solid #000; padding: 8px; font-size: 11px; font-weight: bold;'>" + p.subject + "</td>";
+    html += "<td style='border: 1px solid #000; padding: 8px; font-size: 11px;'>" + p.teacherName + "</td>";
+    html += "<td style='border: 1px solid #000; padding: 8px; font-size: 11px;'>" + p.chapter + "</td>";
+    html += "<td style='border: 1px solid #000; padding: 8px; font-size: 10px;'>" + p.topics.replace(/\n/g, "<br>") + "</td>";
+    html += "<td style='border: 1px solid #000; padding: 8px; font-size: 10px;'>" + p.homework.replace(/\n/g, "<br>") + "</td>";
+    html += "</tr>";
+  }
+  
+  html += "</table>";
+  html += "<div style='margin-top: 30px; text-align: right; font-size: 10px; color: #888;'>";
+  html += "<p>Generated by Sacred Heart Academic Automation System</p>";
+  html += "</div>";
+  html += "</body></html>";
+  
+  var blob = Utilities.newBlob(html, MimeType.HTML);
+  return blob.getAs(MimeType.PDF);
+}
 
-  var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; border: 1px solid #eee; padding: 20px;'>" +
+function sendFormalCompilationEmail(name, email, cls, sec, weekRange, driveLink, pdfBlob, fileName) {
+  var subject = "[OFFICIAL] Compiled Weekly Syllabus: Class " + cls + "-" + sec;
+  
+  var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #eee;'>" +
     "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
     "<p>Dear " + name + ",</p>" +
-    "<p>Here is the automated syllabus compilation for <b>Class " + classLevel + "-" + section + "</b> for the week of <b>" + weekStarting + "</b>.</p>" +
-    "<table style='width:100%; border-collapse:collapse; margin-top:15px;'>" +
-    "<tr style='background-color:#003399; color:white;'>" +
-    "<th style='padding:10px; border:1px solid #ddd;'>Subject</th>" +
-    "<th style='padding:10px; border:1px solid #ddd;'>Faculty</th>" +
-    "<th style='padding:10px; border:1px solid #ddd;'>Chapter</th>" +
-    "<th style='padding:10px; border:1px solid #ddd;'>Topics</th>" +
-    "<th style='padding:10px; border:1px solid #ddd;'>Homework</th>" +
-    "</tr>" +
-    tableRows +
-    "</table>" +
-    "<br><p><i>Note: This is an auto-generated summary. For the official signed PDF, please access the portal.</i></p>" +
+    "<p>Please find the compiled PDF of the lesson plan in the attachment for the week of <b>" + weekRange + "</b> for <b>Class " + cls + "-" + sec + "</b>.</p>" +
+    "<p>For your records, the file has also been archived to the school cloud drive.</p>" +
+    "<p><a href='" + driveLink + "' style='background-color: #003399; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-weight: bold;'>View in Google Drive</a></p>" +
+    "<br>" +
     "<p>Best Regards,</p>" +
-    "<p><b>Academic Automation System</b></p>" +
+    "<p><b>Academic Automation System</b><br>Sacred Heart School</p>" +
     "</div>";
-
+    
   GmailApp.sendEmail(email, subject, "", {
     name: "Sacred Heart School",
-    htmlBody: htmlBody
+    htmlBody: htmlBody,
+    attachments: [pdfBlob]
   });
 }
 
