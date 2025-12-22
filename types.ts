@@ -1,5 +1,5 @@
 
-export type ClassLevel = 'V' | 'VI' | 'VII';
+export type ClassLevel = 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII' | 'VIII' | 'IX' | 'X' | 'XI' | 'XII';
 export type Section = 'A' | 'B' | 'C' | 'D';
 
 export interface AssignedClass {

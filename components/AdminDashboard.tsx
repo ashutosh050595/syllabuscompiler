@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { Teacher, WeeklySubmission, ClassLevel, Section, Submission } from '../types';
-import { getNextWeekMonday, ADMIN_EMAIL, INITIAL_TEACHERS, PORTAL_LINK, getWhatsAppLink } from '../constants';
+import { Teacher, WeeklySubmission, ClassLevel, Section, Submission, AssignedClass } from '../types';
+import { getNextWeekMonday, PORTAL_LINK, getWhatsAppLink, ALL_CLASSES, ALL_SECTIONS } from '../constants';
 import { generateSyllabusPDF } from '../services/pdfService';
 
 interface Props {
@@ -21,6 +21,9 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Partial<Teacher> | null>(null);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+
+  // Form State for "Teaching Assignments" builder in Modal
+  const [tempAssignment, setTempAssignment] = useState<AssignedClass>({ classLevel: 'I', section: 'A', subject: '' });
 
   const missingTeachers = useMemo(() => {
     const submittedIds = new Set(submissions.filter(s => s.weekStarting === nextWeek).map(s => s.teacherId));
@@ -52,23 +55,24 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
 
   const handleGlobalEmailCompilation = async () => {
     setIsProcessing('emails');
-    const classes: { level: ClassLevel, sec: Section }[] = [
-      { level: 'V', sec: 'A' }, { level: 'V', sec: 'B' }, { level: 'V', sec: 'C' },
-      { level: 'VI', sec: 'A' }, { level: 'VI', sec: 'B' }, { level: 'VI', sec: 'C' }, { level: 'VI', sec: 'D' },
-      { level: 'VII', sec: 'A' }, { level: 'VII', sec: 'B' }, { level: 'VII', sec: 'C' }, { level: 'VII', sec: 'D' }
-    ];
-
     let sentCount = 0;
-    for (const cls of classes) {
-      const classTeacher = teachers.find(t => t.isClassTeacher?.classLevel === cls.level && t.isClassTeacher?.section === cls.sec);
-      if (!classTeacher) continue;
+    
+    // Get unique classes from registry
+    const activeClasses = teachers.reduce((acc, t) => {
+      if (t.isClassTeacher) {
+        acc.push({ level: t.isClassTeacher.classLevel, sec: t.isClassTeacher.section, teacher: t });
+      }
+      return acc;
+    }, [] as { level: ClassLevel, sec: Section, teacher: Teacher }[]);
+
+    for (const cls of activeClasses) {
       const relevantSubmissions = submissions.filter(s => s.weekStarting === nextWeek).flatMap(s => 
         s.plans.filter(p => p.classLevel === cls.level && p.section === cls.sec).map(p => ({ ...p, teacherName: s.teacherName }))
       );
       if (relevantSubmissions.length > 0) {
-        const doc = generateSyllabusPDF(relevantSubmissions, { name: classTeacher.name, email: classTeacher.email, classLevel: cls.level, section: cls.sec }, nextWeek, "Saturday");
+        const doc = generateSyllabusPDF(relevantSubmissions, { name: cls.teacher.name, email: cls.teacher.email, classLevel: cls.level, section: cls.sec }, nextWeek, "Saturday");
         const pdfBase64 = doc.output('datauristring');
-        await onSendPdf(pdfBase64, classTeacher.email, `${cls.level}-${cls.sec}`, `Syllabus_${cls.level}${cls.sec}_${nextWeek}.pdf`);
+        await onSendPdf(pdfBase64, cls.teacher.email, `${cls.level}-${cls.sec}`, `Syllabus_${cls.level}${cls.sec}_${nextWeek}.pdf`);
         sentCount++;
       }
     }
@@ -86,6 +90,19 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
     window.open(url, '_blank');
   };
 
+  const addAssignment = () => {
+    if (!tempAssignment.subject) return;
+    const current = editing?.assignedClasses || [];
+    setEditing({ ...editing, assignedClasses: [...current, { ...tempAssignment }] });
+    setTempAssignment({ ...tempAssignment, subject: '' });
+  };
+
+  const removeAssignment = (index: number) => {
+    const current = editing?.assignedClasses || [];
+    const updated = current.filter((_, i) => i !== index);
+    setEditing({ ...editing, assignedClasses: updated });
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="bg-white rounded-[2.5rem] p-10 shadow-2xl shadow-gray-200 border border-gray-100 flex flex-col lg:flex-row justify-between items-center gap-8">
@@ -97,8 +114,8 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
           </div>
         </div>
         <div className="flex flex-wrap gap-4 justify-center">
-           <button onClick={handleGlobalReminders} disabled={!!isProcessing || missingTeachers.length === 0} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl disabled:opacity-50">Send Batch Reminders</button>
-           <button onClick={handleGlobalEmailCompilation} disabled={!!isProcessing} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl disabled:opacity-50">Batch Mail Reports</button>
+           <button onClick={handleGlobalReminders} disabled={!!isProcessing || missingTeachers.length === 0} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl disabled:opacity-50 transition-all">Send Batch Reminders</button>
+           <button onClick={handleGlobalEmailCompilation} disabled={!!isProcessing} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl disabled:opacity-50 transition-all">Batch Mail Reports</button>
            <button onClick={() => setActiveTab('settings')} className="bg-gray-900 hover:bg-black text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl transition-all active:scale-95">
              <i className="fas fa-sliders mr-2"></i> Cloud Setup
            </button>
@@ -114,7 +131,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
            ))}
         </div>
 
-        <div className="p-12">
+        <div className="p-8 md:p-12">
           {activeTab === 'monitor' && (
             <div className="space-y-12">
               <div className="flex items-center justify-between">
@@ -141,6 +158,74 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
             </div>
           )}
 
+          {activeTab === 'registry' && (
+            <div className="space-y-10">
+               <div className="flex justify-between items-center">
+                  <h3 className="text-2xl font-black text-gray-800 tracking-tight">Faculty Registry</h3>
+                  <button onClick={() => { setEditing({ assignedClasses: [] }); setShowModal(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl transition-all">Add New Faculty</button>
+               </div>
+               
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left border-separate border-spacing-y-4">
+                   <thead>
+                     <tr className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-4">
+                       <th className="pb-4 pl-8">Name</th>
+                       <th className="pb-4">Teaching Assignment (Class & Sec)</th>
+                       <th className="pb-4">Class Teacher Status</th>
+                       <th className="pb-4">WhatsApp</th>
+                       <th className="pb-4">Email ID</th>
+                       <th className="pb-4 pr-8 text-right">Actions</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {teachers.map(t => (
+                       <tr key={t.id} className="bg-gray-50/50 hover:bg-white border border-transparent hover:border-blue-100 transition-all rounded-3xl group">
+                         <td className="py-6 pl-8 rounded-l-[2rem]">
+                           <div className="flex items-center gap-4">
+                             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-xs">
+                               {t.name.charAt(0)}
+                             </div>
+                             <span className="font-black text-gray-800 text-sm">{t.name}</span>
+                           </div>
+                         </td>
+                         <td className="py-6">
+                           <div className="flex flex-wrap gap-1.5 max-w-xs">
+                             {t.assignedClasses.length > 0 ? (
+                               Array.from(new Set(t.assignedClasses.map(ac => `${ac.classLevel}-${ac.section}`))).map(tag => (
+                                 <span key={tag} className="text-[9px] font-black bg-white border border-gray-100 px-2 py-1 rounded-lg text-gray-600">{tag}</span>
+                               ))
+                             ) : <span className="text-gray-300 text-[10px] font-bold">No assignments</span>}
+                           </div>
+                         </td>
+                         <td className="py-6">
+                           {t.isClassTeacher ? (
+                             <div className="flex flex-col">
+                               <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full w-fit uppercase">Yes</span>
+                               <span className="text-[9px] font-bold text-gray-400 mt-1">Class {t.isClassTeacher.classLevel}-{t.isClassTeacher.section}</span>
+                             </div>
+                           ) : (
+                             <span className="text-[10px] font-black text-gray-400 bg-gray-100 px-3 py-1 rounded-full w-fit uppercase">No</span>
+                           )}
+                         </td>
+                         <td className="py-6">
+                           <span className="text-xs font-bold text-gray-600">{t.whatsapp || '---'}</span>
+                         </td>
+                         <td className="py-6">
+                           <span className="text-xs font-bold text-gray-400">{t.email}</span>
+                         </td>
+                         <td className="py-6 pr-8 text-right rounded-r-[2rem]">
+                            <button onClick={() => { setEditing(t); setShowModal(true); }} className="w-10 h-10 rounded-xl bg-white shadow-sm text-gray-400 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-all mx-auto md:ml-auto">
+                              <i className="fas fa-edit text-xs"></i>
+                            </button>
+                         </td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
+            </div>
+          )}
+
           {activeTab === 'settings' && (
             <div className="max-w-2xl space-y-10">
                <div className="bg-blue-50 border border-blue-100 p-12 rounded-[3.5rem]">
@@ -152,37 +237,10 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                         <input type="url" className="w-full px-8 py-5 rounded-2xl bg-white border-blue-200 border outline-none font-bold text-blue-900" placeholder="https://script.google.com/..." value={syncUrl} onChange={e => setSyncUrl(e.target.value)} />
                      </div>
                      <div className="flex gap-4">
-                        <button onClick={() => { setTeachers([...teachers]); alert("Registry Synced to Cloud!"); }} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-2xl font-black text-xs">Force Sync Registry</button>
-                        <button onClick={() => setSyncUrl('')} className="bg-white text-blue-600 border border-blue-200 px-10 py-5 rounded-2xl font-black text-xs hover:bg-blue-50">Disconnect</button>
+                        <button onClick={() => { setTeachers([...teachers]); alert("Registry Synced to Cloud!"); }} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-2xl font-black text-xs transition-all">Force Sync Registry</button>
+                        <button onClick={() => setSyncUrl('')} className="bg-white text-blue-600 border border-blue-200 px-10 py-5 rounded-2xl font-black text-xs hover:bg-blue-50 transition-all">Disconnect</button>
                      </div>
-                     {syncUrl && (
-                       <div className="mt-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-3">
-                         <i className="fas fa-check-circle text-emerald-500"></i>
-                         <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Autonomous Reminders Enabled</p>
-                       </div>
-                     )}
                   </div>
-               </div>
-            </div>
-          )}
-          
-          {activeTab === 'registry' && (
-            <div className="space-y-10">
-               <div className="flex justify-between items-center">
-                  <h3 className="text-2xl font-black text-gray-800 tracking-tight">Faculty Registry</h3>
-                  <button onClick={() => { setEditing({ assignedClasses: [] }); setShowModal(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl font-black text-xs shadow-xl">Add Faculty</button>
-               </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                 {teachers.map(t => (
-                   <div key={t.id} className="p-8 rounded-[2.5rem] border border-gray-50 bg-gray-50/30 hover:bg-white hover:border-blue-100 transition-all group relative text-center">
-                     <div className="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center text-blue-300 font-black border border-gray-100 text-2xl mb-4 mx-auto group-hover:text-blue-600 group-hover:border-blue-100">
-                      {t.name.charAt(0)}
-                     </div>
-                     <p className="font-black text-gray-900 text-sm leading-tight">{t.name}</p>
-                     <p className="text-[9px] text-gray-400 font-black uppercase mt-1 tracking-widest">{t.email}</p>
-                     <button onClick={() => { setEditing(t); setShowModal(true); }} className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white shadow-sm text-gray-400 opacity-0 group-hover:opacity-100 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-all"><i className="fas fa-edit text-xs"></i></button>
-                   </div>
-                 ))}
                </div>
             </div>
           )}
@@ -190,31 +248,118 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-gray-900/60 backdrop-blur-md">
-           <div className="bg-white rounded-[3.5rem] shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
-             <div className="bg-gray-900 p-10 text-white flex justify-between items-center">
-               <h3 className="text-2xl font-black uppercase tracking-widest">Faculty Profile</h3>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-gray-900/60 backdrop-blur-md overflow-y-auto">
+           <div className="bg-white rounded-[3.5rem] shadow-2xl w-full max-w-2xl my-auto animate-in zoom-in-95 duration-200">
+             <div className="bg-gray-900 p-10 text-white flex justify-between items-center rounded-t-[3.5rem]">
+               <h3 className="text-2xl font-black uppercase tracking-widest">Faculty Profile Configuration</h3>
                <button onClick={() => setShowModal(false)} className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-all flex items-center justify-center"><i className="fas fa-times"></i></button>
              </div>
-             <div className="p-12 space-y-8">
-                <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Name</label>
-                  <input type="text" className="w-full px-8 py-5 rounded-2xl bg-gray-50 border-gray-100 outline-none font-bold focus:border-blue-500" placeholder="e.g. John Doe" value={editing?.name || ''} onChange={e => setEditing({...editing, name: e.target.value})} />
+             
+             <div className="p-10 space-y-10 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                
+                {/* Field 1: Is Class Teacher */}
+                <div className="bg-gray-50 p-6 rounded-3xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-black text-gray-800 text-sm">Class Teacher Status</h4>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Is this faculty member a Class Teacher?</p>
+                    </div>
+                    <button 
+                      onClick={() => setEditing({ ...editing, isClassTeacher: editing?.isClassTeacher ? undefined : { classLevel: 'I', section: 'A' } })}
+                      className={`px-6 py-2 rounded-full text-[10px] font-black uppercase transition-all ${editing?.isClassTeacher ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-500'}`}
+                    >
+                      {editing?.isClassTeacher ? 'Yes' : 'No'}
+                    </button>
+                  </div>
+
+                  {/* Field 2: Class Teacher Details (Conditional) */}
+                  {editing?.isClassTeacher && (
+                    <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2">
+                       <div>
+                         <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Class Level</label>
+                         <select 
+                           className="w-full px-4 py-3 rounded-xl bg-white border border-gray-100 font-bold text-sm"
+                           value={editing.isClassTeacher.classLevel}
+                           onChange={e => setEditing({...editing, isClassTeacher: { ...editing.isClassTeacher!, classLevel: e.target.value as ClassLevel }})}
+                         >
+                           {ALL_CLASSES.map(c => <option key={c} value={c}>Class {c}</option>)}
+                         </select>
+                       </div>
+                       <div>
+                         <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Section</label>
+                         <select 
+                           className="w-full px-4 py-3 rounded-xl bg-white border border-gray-100 font-bold text-sm"
+                           value={editing.isClassTeacher.section}
+                           onChange={e => setEditing({...editing, isClassTeacher: { ...editing.isClassTeacher!, section: e.target.value as Section }})}
+                         >
+                           {ALL_SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                         </select>
+                       </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* Field 3: Name of Teacher */}
                 <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email</label>
-                  <input type="email" className="w-full px-8 py-5 rounded-2xl bg-gray-50 border-gray-100 outline-none font-bold focus:border-blue-500" value={editing?.email || ''} onChange={e => setEditing({...editing, email: e.target.value})} />
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Name of Teacher</label>
+                  <input type="text" className="w-full px-8 py-5 rounded-2xl bg-gray-50 border-gray-100 border outline-none font-bold focus:border-blue-500" placeholder="e.g. Rahul Sharma" value={editing?.name || ''} onChange={e => setEditing({...editing, name: e.target.value})} />
                 </div>
-                <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">WhatsApp</label>
-                  <input type="tel" className="w-full px-8 py-5 rounded-2xl bg-gray-50 border-gray-100 outline-none font-bold focus:border-blue-500" value={editing?.whatsapp || ''} onChange={e => setEditing({...editing, whatsapp: e.target.value})} />
+
+                {/* Field 4 & 5: Whatsapp & Email */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">WhatsApp Number</label>
+                    <input type="tel" className="w-full px-8 py-5 rounded-2xl bg-gray-50 border-gray-100 border outline-none font-bold focus:border-blue-500" placeholder="10 Digit Number" value={editing?.whatsapp || ''} onChange={e => setEditing({...editing, whatsapp: e.target.value})} />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email ID</label>
+                    <input type="email" className="w-full px-8 py-5 rounded-2xl bg-gray-50 border-gray-100 border outline-none font-bold focus:border-blue-500" placeholder="teacher@sacredheartkoderma.org" value={editing?.email || ''} onChange={e => setEditing({...editing, email: e.target.value})} />
+                  </div>
                 </div>
+
+                {/* Dynamic Assignments Builder */}
+                <div className="space-y-6">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Teaching Assignments (Subjects & Classes)</label>
+                  
+                  <div className="bg-blue-50 p-6 rounded-3xl space-y-4">
+                     <div className="grid grid-cols-3 gap-3">
+                        <select className="px-4 py-3 rounded-xl bg-white border border-blue-100 font-bold text-xs" value={tempAssignment.classLevel} onChange={e => setTempAssignment({...tempAssignment, classLevel: e.target.value as ClassLevel})}>
+                          {ALL_CLASSES.map(c => <option key={c} value={c}>Class {c}</option>)}
+                        </select>
+                        <select className="px-4 py-3 rounded-xl bg-white border border-blue-100 font-bold text-xs" value={tempAssignment.section} onChange={e => setTempAssignment({...tempAssignment, section: e.target.value as Section})}>
+                          {ALL_SECTIONS.map(s => <option key={s} value={s}>Sec {s}</option>)}
+                        </select>
+                        <input 
+                          type="text" 
+                          placeholder="Subject" 
+                          className="px-4 py-3 rounded-xl bg-white border border-blue-100 font-bold text-xs"
+                          value={tempAssignment.subject}
+                          onChange={e => setTempAssignment({...tempAssignment, subject: e.target.value})}
+                        />
+                     </div>
+                     <button onClick={addAssignment} className="w-full bg-blue-600 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-100">Add Assignment</button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {editing?.assignedClasses?.map((ac, idx) => (
+                      <div key={idx} className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-xl group animate-in zoom-in-95">
+                        <span className="text-[10px] font-black text-gray-700">{ac.classLevel}-{ac.section} &bull; {ac.subject}</span>
+                        <button onClick={() => removeAssignment(idx)} className="text-gray-300 hover:text-red-500 transition-colors"><i className="fas fa-times-circle"></i></button>
+                      </div>
+                    ))}
+                    {(!editing?.assignedClasses || editing.assignedClasses.length === 0) && <p className="text-[10px] text-gray-300 italic">No classes assigned yet.</p>}
+                  </div>
+                </div>
+
                 <button onClick={() => {
-                   if (!editing?.name || !editing?.email) return;
-                   const updated = editing.id ? teachers.map(t => t.id === editing.id ? editing as Teacher : t) : [...teachers, { ...editing, id: crypto.randomUUID(), assignedClasses: [] } as Teacher];
+                   if (!editing?.name || !editing?.email) {
+                     alert("Name and Email are required.");
+                     return;
+                   }
+                   const updated = editing.id ? teachers.map(t => t.id === editing.id ? editing as Teacher : t) : [...teachers, { ...editing, id: crypto.randomUUID(), assignedClasses: editing.assignedClasses || [] } as Teacher];
                    setTeachers(updated);
                    setShowModal(false);
-                }} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-2xl font-black shadow-2xl transition-all active:scale-95">Save Faculty Record</button>
+                }} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-3xl font-black shadow-2xl transition-all active:scale-95 text-lg">Save Faculty Record</button>
              </div>
            </div>
         </div>
