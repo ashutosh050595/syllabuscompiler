@@ -1,6 +1,6 @@
 
 /**
- * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v4.3)
+ * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v4.4)
  * 
  * IMPORTANT:
  * 1. Paste this entire code into your Google Apps Script editor.
@@ -198,7 +198,15 @@ function createSyllabusPDF(cls, sec, weekRange, teacherName, plans) {
 
 function sendFormalCompilationEmail(name, email, cls, sec, weekRange, driveLink, pdfBlob, fileName) {
   var subject = "[OFFICIAL] Compiled Weekly Syllabus: Class " + cls + "-" + sec;
-  var htmlBody = "<div><p>Dear " + name + ",</p><p>Attached is the compiled syllabus for <b>" + weekRange + "</b>.</p><p><a href='" + driveLink + "'>View in Google Drive</a></p></div>";
+  var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+      "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+      "<p>Dear " + name + ",</p>" +
+      "<p>Please find the attached <b>Official Compiled Syllabus Report</b> for <b>Class " + cls + "-" + sec + "</b> covering the week of <b>" + weekRange + "</b>.</p>" +
+      "<p>This document has been archived in the school cloud repository.</p>" +
+      "<p><a href='" + driveLink + "' style='background-color: #003399; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-weight: bold;'>View in Google Drive</a></p>" +
+      "<br><p>Best Regards,</p>" +
+      "<p><b>Academic Administration</b><br>Sacred Heart School</p>" +
+      "</div>";
   GmailApp.sendEmail(email, subject, "", { name: "Sacred Heart School", htmlBody: htmlBody, attachments: [pdfBlob] });
 }
 
@@ -264,10 +272,43 @@ function handlePlanSubmission(data) {
   data.plans.forEach(function(p) {
     sheet.appendRow([new Date(), data.weekStarting, data.teacherName, data.teacherEmail, p.classLevel, p.section, p.subject, p.chapterName, p.topics, p.homework]);
   });
-  // Simple Confirmation Email
+  
+  // Formal Confirmation Email
   try {
-     GmailApp.sendEmail(data.teacherEmail, "Confirmation: Lesson Plan Submitted", "Your lesson plan has been recorded.", { name: "Sacred Heart School" });
-  } catch (e) {}
+    var startDate = new Date(data.weekStarting);
+    var endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 5); 
+    var dateToStr = endDate.toISOString().split('T')[0];
+
+    var subject = "[OFFICIAL] Confirmation: Weekly Syllabus Submission Received";
+    var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+      "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+      "<p>Dear " + data.teacherName + ",</p>" +
+      "<p>This message is to confirm that your lesson plan for the week of <b>" + data.weekStarting + "</b> to <b>" + dateToStr + "</b> has been successfully recorded in the central database.</p>" +
+      "<p><b>Subjects Recorded:</b></p><ul>";
+
+    var uniqueSubjects = [];
+    var seen = {};
+    data.plans.forEach(function(p) {
+      var key = "Class " + p.classLevel + "-" + p.section + " (" + p.subject + ")";
+      if (!seen[key]) {
+        uniqueSubjects.push("<li>" + key + "</li>");
+        seen[key] = true;
+      }
+    });
+    
+    htmlBody += uniqueSubjects.join("") + "</ul>" +
+      "<p>Thank you for your timely contribution to the academic planning process.</p>" +
+      "<br><p>Best Regards,</p>" +
+      "<p><b>Academic Coordinator</b><br>Sacred Heart School</p>" +
+      "</div>";
+
+    GmailApp.sendEmail(data.teacherEmail, subject, "", {
+      name: "Sacred Heart School",
+      htmlBody: htmlBody
+    });
+  } catch (e) { console.error(e); }
+
   return jsonResponse("success");
 }
 
@@ -297,16 +338,28 @@ function handleResubmitApproval(data) {
       }
     }
   }
-  handleResetSubmission(data); // Reuse deletion logic
   
-  var subject = "Permission Granted: Weekly Syllabus Resubmission";
-  var htmlBody = "<div><p>Dear " + data.teacherName + ",</p><p>Your request for resubmission has been APPROVED. You can now submit again.</p><p><a href='" + PORTAL_URL + "'>Go to Portal</a></p></div>";
+  // Reuse deletion logic
+  handleResetSubmission(data, true); 
+  
+  // Formal Approval Email
+  var subject = "[APPROVED] Permission to Resubmit Weekly Syllabus";
+  var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+    "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+    "<p>Dear " + data.teacherName + ",</p>" +
+    "<p>We wish to inform you that your request to modify the syllabus submission for the week commencing <b>" + data.weekStarting + "</b> has been <b>GRANTED</b> by the administration.</p>" +
+    "<p>Your previous submission has been cleared from the registry. You may now access the portal to submit the updated lesson plan.</p>" +
+    "<p style='text-align: center;'><a href='" + PORTAL_URL + "' style='background: #003399; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Access Portal</a></p>" +
+    "<br><p>Best Regards,</p>" +
+    "<p><b>Academic Administration</b><br>Sacred Heart School</p>" +
+    "</div>";
+
   GmailApp.sendEmail(data.teacherEmail, subject, "", { name: "Sacred Heart School", htmlBody: htmlBody });
 
   return jsonResponse("success", "Approval Sent");
 }
 
-function handleResetSubmission(data) {
+function handleResetSubmission(data, skipEmail) {
   // data needs: weekStarting, teacherEmail
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SUBMISSIONS_SHEET);
   var rows = sheet.getDataRange().getValues();
@@ -317,11 +370,23 @@ function handleResetSubmission(data) {
       sheet.deleteRow(i + 1);
     }
   }
-  // Optional notification for forced reset
-  if (data.action === 'RESET_SUBMISSION') {
+  
+  // Formal Forced Reset Email (Only if not called from Approval flow)
+  if (!skipEmail) {
      try {
-       GmailApp.sendEmail(data.teacherEmail, "Action Required: Syllabus Plan Reset", "Your plan has been reset by the Admin. Please resubmit.", { name: "Sacred Heart School" });
-     } catch(e) {}
+       var subject = "[ALERT] Administrative Reset of Syllabus Submission";
+       var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+          "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+          "<p>Dear " + data.teacherName + ",</p>" +
+          "<p>We wish to inform you that your syllabus submission for the week of <b>" + data.weekStarting + "</b> has been reset by the administrative office due to necessary updates or correction requirements.</p>" +
+          "<p>Please log in to the faculty portal and submit your lesson plan again at your earliest convenience.</p>" +
+          "<p style='text-align: center;'><a href='" + PORTAL_URL + "' style='background: #d32f2f; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Resubmit Plan</a></p>" +
+          "<br><p>Best Regards,</p>" +
+          "<p><b>Academic Administration</b><br>Sacred Heart School</p>" +
+          "</div>";
+          
+       GmailApp.sendEmail(data.teacherEmail, subject, "", { name: "Sacred Heart School", htmlBody: htmlBody });
+     } catch(e) { console.error(e); }
   }
   return jsonResponse("success");
 }
