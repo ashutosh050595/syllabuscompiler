@@ -243,7 +243,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
             </div>
             <div className="p-8 max-h-[250px] overflow-y-auto bg-white custom-scrollbar">
               <div className="space-y-3">
-                {batchStatus.log.map((entry, idx) => (
+                {batchStatus.log.map((entry: string, idx: number) => (
                   <div key={idx} className="flex items-center gap-3 text-xs font-bold text-gray-600">
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>{entry}
                   </div>
@@ -349,7 +349,6 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                          </td>
                          <td className="py-6">
                            <div className="flex flex-wrap gap-1">
-                             {/* FIX: Use spread operator for better type inference during Set-to-Array conversion to avoid "unknown" type error */}
                              {[...new Set(t.assignedClasses.map(ac => `${ac.classLevel}-${ac.section}`))].map(tag => (
                                <span key={tag} className="text-[9px] font-black bg-white border border-gray-100 px-2 py-1 rounded-lg text-gray-600">{tag}</span>
                              ))}

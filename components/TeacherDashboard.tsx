@@ -7,7 +7,7 @@ import { generateSyllabusPDF } from '../services/pdfService';
 
 interface Props {
   teacher: Teacher;
-  teachers: Teacher[]; // Pass the full faculty registry
+  teachers: Teacher[]; 
   submissions: WeeklySubmission[];
   setSubmissions: (s: WeeklySubmission[]) => void;
   allSubmissions: WeeklySubmission[];
@@ -27,14 +27,21 @@ interface GroupedAssignment {
 
 const TeacherDashboard: React.FC<Props> = ({ teacher, teachers, submissions, setSubmissions, allSubmissions, isCloudEnabled, syncUrl, setSyncUrl, onSendWarnings, onSendPdf }) => {
   const nextWeek = getNextWeekMonday();
-  const [view, setView] = useState<'status' | 'form' | 'history' | 'setup'>('status');
+  const [view, setView] = useState<'status' | 'form' | 'history'>('status');
   const [isMailing, setIsMailing] = useState(false);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   
   const saturday = new Date(nextWeek);
   saturday.setDate(saturday.getDate() + 5);
   const saturdayStr = saturday.toISOString().split('T')[0];
 
   const currentSubmission = submissions.find(s => s.teacherId === teacher.id && s.weekStarting === nextWeek);
+
+  const myHistory = useMemo(() => {
+    return submissions
+      .filter(s => s.teacherId === teacher.id)
+      .sort((a, b) => new Date(b.weekStarting).getTime() - new Date(a.weekStarting).getTime());
+  }, [submissions, teacher.id]);
 
   const groupedAssignments = useMemo(() => {
     const groups: Record<string, GroupedAssignment> = {};
@@ -52,7 +59,6 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, teachers, submissions, set
     if (!teacher.isClassTeacher) return null;
     const { classLevel, section } = teacher.isClassTeacher;
     
-    // FIX: Map over all registered teachers, not just initial hardcoded list
     const requirements = teachers.flatMap(t => 
       t.assignedClasses
         .filter(ac => ac.classLevel === classLevel && ac.section === section)
@@ -172,8 +178,9 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, teachers, submissions, set
           </div>
         </div>
         <div className="flex gap-2 flex-wrap justify-center w-full md:w-auto">
-           <button onClick={() => setView('status')} className={`flex-1 md:flex-none px-4 md:px-6 py-3 rounded-2xl text-[10px] font-black transition-all ${view === 'status' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'}`}>Status</button>
-           <button onClick={() => setView('form')} className={`flex-1 md:flex-none px-4 md:px-6 py-3 rounded-2xl text-[10px] font-black transition-all ${view === 'form' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}>New Plan</button>
+           <button onClick={() => setView('status')} className={`flex-1 md:flex-none px-4 md:px-6 py-3 rounded-2xl text-[10px] font-black transition-all ${view === 'status' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>Status</button>
+           <button onClick={() => setView('form')} className={`flex-1 md:flex-none px-4 md:px-6 py-3 rounded-2xl text-[10px] font-black transition-all ${view === 'form' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>New Plan</button>
+           <button onClick={() => setView('history')} className={`flex-1 md:flex-none px-4 md:px-6 py-3 rounded-2xl text-[10px] font-black transition-all ${view === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>History</button>
         </div>
       </div>
 
@@ -233,7 +240,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, teachers, submissions, set
                     return (
                       <div key={g.id} className="p-5 md:p-6 rounded-[2rem] bg-gray-50 border border-gray-100 flex items-center justify-between hover:border-blue-100 transition-all">
                         <div className="flex items-center space-x-4">
-                          <div className={`w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${CLASS_STYLES[g.classLevel].bg}`}>
+                          <div className={`w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${CLASS_STYLES[g.classLevel]?.bg || 'bg-blue-600'}`}>
                             <i className="fas fa-graduation-cap text-sm"></i>
                           </div>
                           <div>
@@ -306,6 +313,64 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, teachers, submissions, set
             </button>
           </div>
         </form>
+      )}
+
+      {view === 'history' && (
+        <div className="bg-white rounded-[3rem] p-8 md:p-12 shadow-sm border border-gray-100 animate-in slide-in-from-right-4">
+           <h3 className="text-2xl md:text-3xl font-black text-gray-800 mb-10 tracking-tight">Submission History</h3>
+           
+           {myHistory.length > 0 ? (
+             <div className="space-y-6">
+               {myHistory.map(h => (
+                 <div key={h.id} className="bg-gray-50 rounded-[2.5rem] border border-gray-100 overflow-hidden">
+                    <button 
+                      onClick={() => setExpandedHistoryId(expandedHistoryId === h.id ? null : h.id)}
+                      className="w-full p-6 md:p-8 flex items-center justify-between hover:bg-white transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-5">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl">
+                          <i className="fas fa-calendar-alt"></i>
+                        </div>
+                        <div>
+                          <p className="font-black text-gray-900 text-base md:text-lg">Week Beginning: {h.weekStarting}</p>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Submitted on: {new Date(h.timestamp).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <i className={`fas fa-chevron-${expandedHistoryId === h.id ? 'up' : 'down'} text-gray-300`}></i>
+                    </button>
+                    
+                    {expandedHistoryId === h.id && (
+                      <div className="px-8 pb-10 pt-4 space-y-8 animate-in slide-in-from-top-4">
+                         {h.plans.map((p, idx) => (
+                           <div key={idx} className="bg-white p-6 rounded-3xl border border-gray-100 space-y-4 shadow-sm">
+                              <div className="flex justify-between items-center border-b border-gray-50 pb-3">
+                                <h4 className="font-black text-gray-800">{p.subject} <span className="text-blue-500 ml-1">{p.classLevel}-{p.section}</span></h4>
+                                <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-3 py-1 rounded-full uppercase">Week {h.weekStarting}</span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                                 <div>
+                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Topics Covered</p>
+                                    <p className="text-xs text-gray-600 leading-relaxed font-medium whitespace-pre-wrap">{p.topics}</p>
+                                 </div>
+                                 <div>
+                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Homework Assigned</p>
+                                    <p className="text-xs text-gray-600 leading-relaxed font-medium whitespace-pre-wrap">{p.homework}</p>
+                                 </div>
+                              </div>
+                           </div>
+                         ))}
+                      </div>
+                    )}
+                 </div>
+               ))}
+             </div>
+           ) : (
+             <div className="py-20 text-center space-y-4">
+                <i className="fas fa-history text-gray-200 text-6xl"></i>
+                <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">No past submissions found in local storage</p>
+             </div>
+           )}
+        </div>
       )}
     </div>
   );

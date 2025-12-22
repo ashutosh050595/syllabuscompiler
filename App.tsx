@@ -66,31 +66,26 @@ const App: React.FC = () => {
   }, []);
 
   /**
-   * Refined POST helper for Google Apps Script compatibility.
-   * Using 'text/plain' content type makes this a "Simple Request", 
-   * which bypasses OPTIONS preflight checks that mobile browsers often block.
+   * Robust POST for Google Apps Script. 
+   * Uses text/plain to avoid preflight (OPTIONS) requests which are 
+   * often blocked by mobile browsers for cross-origin targets.
    */
   const cloudPost = async (url: string, payload: any) => {
     if (!url || !url.startsWith('http')) return false;
     try {
       const response = await fetch(url, {
         method: 'POST',
-        // Crucial for GAS: 'text/plain' skips preflight. 
-        // GAS ignores the header and parses e.postData.contents as string anyway.
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload),
         mode: 'cors',
         redirect: 'follow'
       });
       
-      // Since GAS redirects to googleusercontent (which doesn't return CORS headers),
-      // a successful request might still throw a CORS error in the browser after execution.
-      // However, if we get here, the request was successfully dispatched.
+      // GAS usually redirects to a page without CORS headers, which can trigger a catch block
+      // even if the data was received. If the fetch succeeds, we assume transmission.
       return response.ok || response.status === 0 || response.type === 'opaque';
     } catch (err) {
-      // In many cases with GAS, the browser throws a CORS error even though 
-      // the script executed successfully. We treat network-level dispatch as success.
-      console.debug("Note: Cloud request dispatched (CORS status check bypassed).");
+      console.debug("Note: Cloud request likely dispatched despite browser security warning.");
       return true; 
     }
   };
