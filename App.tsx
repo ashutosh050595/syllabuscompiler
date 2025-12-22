@@ -14,7 +14,7 @@ const App: React.FC = () => {
   const [syncUrl, setSyncUrl] = useState<string>('');
   const [logoLoaded, setLogoLoaded] = useState(true);
   
-  // Refs to avoid stale closures in scheduler
+  // Refs to avoid stale closures in scheduler and async handlers
   const teachersRef = useRef<Teacher[]>([]);
   const submissionsRef = useRef<WeeklySubmission[]>([]);
   const syncUrlRef = useRef<string>('');
@@ -160,9 +160,9 @@ const App: React.FC = () => {
     localStorage.setItem('sh_submissions_v2', JSON.stringify(newSubs));
 
     const latestSub = newSubs[newSubs.length - 1];
-    if (syncUrl && latestSub) {
+    if (syncUrlRef.current && latestSub) {
       try {
-        await fetch(syncUrl, {
+        await fetch(syncUrlRef.current, {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'application/json' },
@@ -175,9 +175,9 @@ const App: React.FC = () => {
   };
 
   const triggerWarningEmails = async (defaulters: { name: string, email: string }[], weekStarting?: string, isAuto = false) => {
-    const url = syncUrl || syncUrlRef.current;
+    const url = syncUrlRef.current;
     if (!url) {
-      if (!isAuto) alert("Cloud Sync is not configured. Admin must set the Deployment URL first.");
+      if (!isAuto) alert("Cloud Sync is not configured. Admin must set the Deployment URL first in Settings.");
       return;
     }
     const week = weekStarting || getNextWeekMonday();
@@ -193,14 +193,14 @@ const App: React.FC = () => {
           isAuto
         })
       });
-      if (!isAuto) alert(`Warning emails dispatched to ${defaulters.length} teachers for the week of ${week}.`);
+      if (!isAuto) alert(`Success: Warning emails dispatched to ${defaulters.length} teachers for the upcoming week (${week}).`);
     } catch (err) {
-      if (!isAuto) alert("Failed to connect to the automation backend.");
+      if (!isAuto) alert("Critical Error: Failed to connect to the automation backend. Check internet or Deployment URL.");
     }
   };
 
   const triggerCompiledPdfEmail = async (pdfBase64: string, recipient: string, className: string, filename: string, isAuto = false) => {
-    const url = syncUrl || syncUrlRef.current;
+    const url = syncUrlRef.current;
     if (!url) return;
     try {
       await fetch(url, {
@@ -217,7 +217,7 @@ const App: React.FC = () => {
           weekStarting: getNextWeekMonday()
         })
       });
-      if (!isAuto) alert(`Compiled PDF successfully emailed to ${recipient}`);
+      if (!isAuto) alert(`Success: Compiled PDF emailed to ${recipient}`);
     } catch (err) {
       if (!isAuto) console.error("Email dispatch failed for", recipient);
     }

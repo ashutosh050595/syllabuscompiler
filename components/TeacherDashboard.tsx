@@ -116,9 +116,10 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
     if (!classStatus) return;
     const defaulters = classStatus.filter(s => !s.submitted).map(s => ({ name: s.teacherName, email: s.email }));
     if (defaulters.length === 0) {
-      alert("Excellent! All teachers have submitted plans for your class for next week.");
+      alert("Excellent! All teachers have submitted plans for your class for the upcoming week.");
       return;
     }
+    // Explicitly target the upcoming week (nextWeek)
     onSendWarnings(defaulters, nextWeek);
   };
 
@@ -144,7 +145,12 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
   const handleWhatsAppShare = () => {
     if (!teacher.isClassTeacher || !classStatus) return;
     const { classLevel, section } = teacher.isClassTeacher;
-    const message = `Hello, the Compiled Weekly Syllabus for Class ${classLevel}-${section} (Starting: ${nextWeek}) has been generated and emailed. Please check your inbox for details.`;
+    const pendingCount = classStatus.filter(s => !s.submitted).length;
+    const statusMsg = pendingCount === 0 
+      ? `✅ All lesson plans for Class ${classLevel}-${section} for the week of ${nextWeek} have been submitted and compiled.`
+      : `⚠️ Attention: ${pendingCount} lesson plans are still pending for Class ${classLevel}-${section} for the upcoming week starting ${nextWeek}.`;
+    
+    const message = `${statusMsg}\n\nTeachers, please ensure your submissions are finalized in the SHS Syllabus Manager portal.`;
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
   };
@@ -169,8 +175,8 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
           </div>
         </div>
         <div className="flex gap-2">
-           <button onClick={() => setView('status')} className={`px-6 py-3 rounded-2xl text-xs font-black transition-all ${view === 'status' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'}`}>Monitor</button>
-           <button onClick={() => setView('form')} className={`px-6 py-3 rounded-2xl text-xs font-black transition-all ${view === 'form' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}>Fill Plan</button>
+           <button onClick={() => setView('status')} className={`px-6 py-3 rounded-2xl text-xs font-black transition-all ${view === 'status' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'}`}>Monitor Status</button>
+           <button onClick={() => setView('form')} className={`px-6 py-3 rounded-2xl text-xs font-black transition-all ${view === 'form' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}>Fill Next Plan</button>
         </div>
       </div>
 
@@ -181,18 +187,18 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
                 <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-gray-100 relative overflow-hidden">
                   <div className="flex justify-between items-center mb-8 relative z-10">
                     <div>
-                        <h3 className="text-2xl font-black text-gray-800">Class {teacher.isClassTeacher.classLevel}-{teacher.isClassTeacher.section} Status</h3>
-                        <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest mt-1">Monitoring for Week Beginning: {nextWeek}</p>
+                        <h3 className="text-2xl font-black text-gray-800">Class {teacher.isClassTeacher.classLevel}-{teacher.isClassTeacher.section} Monitoring</h3>
+                        <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest mt-1">Targeting Upcoming Week: {nextWeek}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button onClick={handleMailCompiled} className="bg-gray-900 text-white px-5 py-2.5 rounded-xl text-[10px] font-black hover:bg-black flex items-center gap-2 transition-transform active:scale-95 shadow-lg">
                         <i className="fas fa-envelope"></i> Mail Compiled PDF
                       </button>
                       <button onClick={handleWhatsAppShare} className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black hover:bg-emerald-700 flex items-center gap-2 transition-transform active:scale-95 shadow-lg shadow-emerald-100">
-                        <i className="fab fa-whatsapp"></i> WhatsApp PDF Link
+                        <i className="fab fa-whatsapp"></i> Share on WhatsApp
                       </button>
                       <button onClick={handleWarnDefaulters} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black hover:bg-blue-700 flex items-center gap-2 transition-transform active:scale-95 shadow-lg shadow-blue-100">
-                        <i className="fas fa-bullhorn"></i> Warn Defaulters
+                        <i className="fas fa-bullhorn"></i> Send Manual Warnings
                       </button>
                     </div>
                   </div>
@@ -212,7 +218,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
               )}
 
               <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-gray-100">
-                <h3 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">My Assignments for Next Week</h3>
+                <h3 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">My Personal Assignments for Next Week</h3>
                 <div className="space-y-4">
                   {groupedAssignments.map(g => {
                     const isDone = currentSubmission?.plans.some(p => p.subject === g.subject && p.classLevel === g.classLevel);
@@ -243,7 +249,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
 
            <div className="space-y-8">
               <div className="bg-gray-900 rounded-[3rem] p-10 shadow-2xl text-white">
-                 <h4 className="text-xl font-black mb-6">Staff Control</h4>
+                 <h4 className="text-xl font-black mb-6">Staff Navigation</h4>
                  <div className="space-y-4">
                    <button onClick={() => setView('form')} className="w-full bg-blue-600 hover:bg-blue-700 py-5 rounded-2xl font-black text-sm shadow-xl flex items-center justify-center space-x-3 transition-all">
                       <i className="fas fa-file-circle-plus"></i>
@@ -251,7 +257,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
                    </button>
                    <button onClick={() => setView('history')} className="w-full bg-white/5 hover:bg-white/10 py-5 rounded-2xl font-black text-sm border border-white/10 flex items-center justify-center space-x-3 transition-all">
                       <i className="fas fa-clock-rotate-left"></i>
-                      <span>Submission Logs</span>
+                      <span>View History</span>
                    </button>
                  </div>
               </div>
@@ -264,7 +270,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
           <div className="bg-gray-800 p-12 text-white flex justify-between items-center">
              <div>
                <h3 className="text-4xl font-black tracking-tight">Academic Planning</h3>
-               <p className="text-gray-400 font-bold text-sm mt-2 uppercase tracking-widest">Planning for Week Starting: {nextWeek}</p>
+               <p className="text-gray-400 font-bold text-sm mt-2 uppercase tracking-widest">Planning for Upcoming Week Starting: {nextWeek}</p>
              </div>
              <button type="button" onClick={() => setView('status')} className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"><i className="fas fa-times text-xl"></i></button>
           </div>
@@ -289,7 +295,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
                        <h4 className="text-3xl font-black text-gray-800 tracking-tight">{g.subject} <span className="text-sm font-bold text-gray-400">({g.classLevel}-{g.sections.join(',')})</span></h4>
                        <div className="space-y-6">
                           <div>
-                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Name of the Chapter to be taught in current week *</label>
+                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Name of the Chapter to be taught in upcoming week *</label>
                              <input required type="text" className="w-full px-8 py-5 rounded-[2rem] bg-gray-50 border-gray-100 border outline-none font-bold" placeholder="Enter chapter title..." value={formData[g.id]?.chapter || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], chapter: e.target.value } })} />
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
