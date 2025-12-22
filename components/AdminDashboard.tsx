@@ -16,6 +16,8 @@ interface Props {
   onSendWarnings: (defaulters: {name: string, email: string}[], weekStarting: string) => Promise<boolean>;
   onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => Promise<any>;
   onResetRegistry?: () => Promise<void>;
+  onForceReset?: (teacherId: string, week: string) => Promise<void>;
+  onForceResetAll?: (week: string) => Promise<void>;
 }
 
 interface BatchStatus {
@@ -28,7 +30,7 @@ interface BatchStatus {
   log: string[];
 }
 
-const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, onSendWarnings, onSendPdf, onResetRegistry }) => {
+const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, onSendWarnings, onSendPdf, onResetRegistry, onForceReset, onForceResetAll }) => {
   const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'requests' | 'archive'>('monitor');
   const [showInfoModal, setShowInfoModal] = useState(false);
   const nextWeek = getNextWeekMonday();
@@ -71,6 +73,10 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
     const submittedIds = new Set(submissions.filter(s => s.weekStarting === nextWeek).map(s => s.teacherId));
     return teachers.filter(t => !submittedIds.has(t.id));
   }, [teachers, submissions, nextWeek]);
+
+  const submittedTeachers = useMemo(() => {
+    return submissions.filter(s => s.weekStarting === nextWeek);
+  }, [submissions, nextWeek]);
 
   const defaultersByClass = useMemo(() => {
     const res: Record<string, Teacher[]> = {};
@@ -294,26 +300,67 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
         <div className="p-8 md:p-12">
           {activeTab === 'monitor' && (
             <div className="space-y-12">
-              <h3 className="text-2xl font-black text-gray-800">Pending Submissions <span className="text-gray-300 ml-2 font-medium">| Week: {nextWeek}</span></h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {Object.keys(defaultersByClass).length > 0 ? (
-                  Object.entries(defaultersByClass).map(([cls, list]) => (
-                    <div key={cls} className="bg-white border-2 border-gray-50 p-8 rounded-[3rem] hover:border-blue-100 transition-all">
-                      <h4 className="font-black text-gray-900 text-xl mb-4">Class {cls}</h4>
-                      <div className="space-y-4">
-                        {(list as Teacher[]).map(t => (
-                          <div key={t.id} className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-gray-600">{t.name}</span>
-                            <div className="flex gap-1">
-                               <button onClick={() => window.open(getWhatsAppLink(t.whatsapp, `Reminder for Class ${cls}`)||'', '_blank')} className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i className="fab fa-whatsapp"></i></button>
-                               <button onClick={() => onSendWarnings([{name: t.name, email: t.email}], nextWeek)} className="text-[8px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg uppercase">Mail</button>
-                            </div>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
+                <div>
+                  <h3 className="text-2xl font-black text-gray-800 mb-8">Pending Submissions <span className="text-gray-300 ml-2 font-medium">| Week: {nextWeek}</span></h3>
+                  <div className="space-y-6">
+                    {Object.keys(defaultersByClass).length > 0 ? (
+                      Object.entries(defaultersByClass).map(([cls, list]) => (
+                        <div key={cls} className="bg-white border-2 border-gray-50 p-6 rounded-[2.5rem] hover:border-blue-100 transition-all">
+                          <h4 className="font-black text-gray-900 text-lg mb-4">Class {cls}</h4>
+                          <div className="space-y-3">
+                            {(list as Teacher[]).map(t => (
+                              <div key={t.id} className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-gray-600">{t.name}</span>
+                                <div className="flex gap-1">
+                                  <button onClick={() => window.open(getWhatsAppLink(t.whatsapp, `Reminder for Class ${cls}`)||'', '_blank')} className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i className="fab fa-whatsapp"></i></button>
+                                  <button onClick={() => onSendWarnings([{name: t.name, email: t.email}], nextWeek)} className="text-[8px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg uppercase">Mail</button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                ) : <div className="col-span-full py-20 text-center text-gray-400 font-bold uppercase tracking-widest">No pending submissions</div>}
+                        </div>
+                      ))
+                    ) : <div className="py-20 text-center text-gray-400 font-bold uppercase tracking-widest bg-gray-50 rounded-[2.5rem]">No pending submissions</div>}
+                  </div>
+                </div>
+
+                <div>
+                   <div className="flex justify-between items-center mb-8">
+                     <h3 className="text-2xl font-black text-gray-800">Submitted Plans</h3>
+                     {submittedTeachers.length > 0 && onForceResetAll && (
+                       <button 
+                         onClick={() => { if(window.confirm("Are you sure you want to RESET ALL submissions for this week?")) onForceResetAll(nextWeek); }}
+                         className="px-4 py-2 bg-red-100 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all"
+                       >
+                         Reset All
+                       </button>
+                     )}
+                   </div>
+                   <div className="space-y-4">
+                      {submittedTeachers.length > 0 ? (
+                        submittedTeachers.map(sub => (
+                          <div key={sub.id} className="bg-emerald-50/50 border border-emerald-100 p-6 rounded-[2rem] flex items-center justify-between">
+                             <div>
+                                <h4 className="font-black text-gray-900 text-sm">{sub.teacherName}</h4>
+                                <p className="text-[10px] text-emerald-600 font-bold mt-1">Submitted: {new Date(sub.timestamp).toLocaleDateString()}</p>
+                             </div>
+                             {onForceReset && (
+                               <button 
+                                 onClick={() => { if(window.confirm(`Reset plan for ${sub.teacherName}?`)) onForceReset(sub.teacherId, nextWeek); }}
+                                 className="w-10 h-10 rounded-xl bg-white text-red-500 shadow-sm hover:bg-red-500 hover:text-white transition-all flex items-center justify-center"
+                                 title="Force Reset Submission"
+                               >
+                                 <i className="fas fa-trash-alt"></i>
+                               </button>
+                             )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-20 text-center text-gray-400 font-bold uppercase tracking-widest bg-gray-50 rounded-[2.5rem]">No submissions yet</div>
+                      )}
+                   </div>
+                </div>
               </div>
             </div>
           )}

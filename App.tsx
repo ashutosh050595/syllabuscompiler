@@ -178,6 +178,46 @@ const App: React.FC = () => {
     }
   };
 
+  const handleForceReset = async (teacherId: string, week: string) => {
+    const sub = submissions.find(s => s.teacherId === teacherId && s.weekStarting === week);
+    if (!sub) return;
+
+    // 1. Remove locally
+    const filtered = submissions.filter(s => s !== sub);
+    setSubmissions(filtered);
+    localStorage.setItem('sh_submissions_v2', JSON.stringify(filtered));
+
+    // 2. Cloud Update
+    if (syncUrlRef.current) {
+      await cloudPost(syncUrlRef.current, {
+        action: 'RESET_SUBMISSION',
+        teacherEmail: sub.teacherEmail,
+        teacherName: sub.teacherName,
+        weekStarting: week
+      });
+    }
+  };
+
+  const handleForceResetAll = async (week: string) => {
+    // 1. Remove all locally for this week
+    const filtered = submissions.filter(s => s.weekStarting !== week);
+    setSubmissions(filtered);
+    localStorage.setItem('sh_submissions_v2', JSON.stringify(filtered));
+
+    // 2. Cloud Update - We loop because backend is simple
+    if (syncUrlRef.current) {
+      const targets = submissions.filter(s => s.weekStarting === week);
+      for (const t of targets) {
+        await cloudPost(syncUrlRef.current, {
+          action: 'RESET_SUBMISSION',
+          teacherEmail: t.teacherEmail,
+          teacherName: t.teacherName,
+          weekStarting: week
+        });
+      }
+    }
+  };
+
   const syncRegistryToCloud = async (currentTeachers: Teacher[]) => {
     return await cloudPost(syncUrlRef.current || syncUrl, { 
       action: 'SYNC_REGISTRY', 
@@ -193,7 +233,6 @@ const App: React.FC = () => {
   };
 
   const handleManualResetRegistry = async () => {
-    // Force reset to hardcoded constants
     setTeachers(INITIAL_TEACHERS);
     teachersRef.current = INITIAL_TEACHERS;
     localStorage.setItem('sh_teachers_v4', JSON.stringify(INITIAL_TEACHERS));
@@ -219,7 +258,6 @@ const App: React.FC = () => {
     setSyncUrl(url);
     syncUrlRef.current = url;
     localStorage.setItem('sh_sync_url', url);
-    // Explicitly sync when URL changes
     if (teachersRef.current.length > 0) syncRegistryToCloud(teachersRef.current);
   };
 
@@ -303,6 +341,8 @@ const App: React.FC = () => {
               syncUrl={syncUrl} setSyncUrl={updateSyncUrl}
               onSendWarnings={triggerWarningEmails} onSendPdf={triggerCompiledPdfEmail}
               onResetRegistry={handleManualResetRegistry}
+              onForceReset={handleForceReset}
+              onForceResetAll={handleForceResetAll}
             />
           ) : (
             <TeacherDashboard 
