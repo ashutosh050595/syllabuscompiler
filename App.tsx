@@ -63,9 +63,33 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'SYNC_REGISTRY', teachers: currentTeachers })
       });
-      console.log("Cloud Registry Updated Successfully");
     } catch (err) {
       console.error("Cloud Registry Sync Failed", err);
+    }
+  };
+
+  const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
+    try {
+      // We use a POST with GET_REGISTRY action to avoid CORS issues with simple GETs sometimes
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'GET_REGISTRY' })
+      });
+      const data = await response.json();
+      if (data.result === 'success' && data.teachers) {
+        setTeachers(data.teachers);
+        teachersRef.current = data.teachers;
+        localStorage.setItem('sh_teachers_v4', JSON.stringify(data.teachers));
+        setSyncUrl(url);
+        syncUrlRef.current = url;
+        localStorage.setItem('sh_sync_url', url);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("Fetch Registry Error:", err);
+      return false;
     }
   };
 
@@ -104,7 +128,6 @@ const App: React.FC = () => {
         await fetch(syncUrlRef.current, {
           method: 'POST',
           mode: 'no-cors',
-          credentials: 'omit',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...latestSub, action: 'SUBMIT_PLAN' })
         });
@@ -116,10 +139,7 @@ const App: React.FC = () => {
 
   const triggerWarningEmails = async (defaulters: { name: string, email: string }[], weekStarting?: string) => {
     const url = syncUrlRef.current || syncUrl;
-    if (!url) {
-      alert("Deployment URL not set.");
-      return;
-    }
+    if (!url) return false;
     const week = weekStarting || getNextWeekMonday();
     try {
       await fetch(url, {
@@ -128,7 +148,6 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'SEND_WARNINGS', defaulters, weekStarting: week, portalLink: PORTAL_LINK })
       });
-      // Removed alert to prevent blocking batch processes
       return true;
     } catch (err) {
       console.error("Email warning error:", err);
@@ -146,7 +165,6 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'SEND_COMPILED_PDF', pdfBase64, recipient, className, filename, weekStarting: getNextWeekMonday() })
       });
-      // Removed alert to prevent blocking batch processes
       return true;
     } catch (err) {
       console.error("PDF delivery error:", err);
@@ -158,21 +176,21 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-gray-50">
       <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center overflow-hidden">
+          <div className="flex items-center space-x-3 md:space-x-4">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-blue-50 rounded-2xl flex items-center justify-center overflow-hidden">
               {logoLoaded ? (
                 <img src={SCHOOL_LOGO_URL} alt="SHS" className="w-full h-full object-contain" onError={() => setLogoLoaded(false)} />
               ) : (
-                <i className="fas fa-school text-blue-600 text-2xl"></i>
+                <i className="fas fa-school text-blue-600 text-xl md:text-2xl"></i>
               )}
             </div>
             <div>
-              <h1 className="text-xl font-black text-blue-800 tracking-tight leading-none uppercase">{SCHOOL_NAME}</h1>
-              <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-widest">Jhumri Telaiya, Estd. 1997</p>
+              <h1 className="text-sm md:text-xl font-black text-blue-800 tracking-tight leading-none uppercase">{SCHOOL_NAME}</h1>
+              <p className="text-[8px] md:text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-widest">Jhumri Telaiya, Estd. 1997</p>
             </div>
           </div>
           {user && (
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3 md:space-x-4">
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-black text-gray-800">{'name' in user ? user.name : 'Administrator'}</p>
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{user.email}</p>
@@ -188,7 +206,7 @@ const App: React.FC = () => {
       <main className="flex-grow p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
           {!user ? (
-            <Login onLogin={handleLogin} teachers={teachers} />
+            <Login onLogin={handleLogin} teachers={teachers} onSyncRegistry={fetchRegistryFromCloud} />
           ) : 'isAdmin' in user ? (
             <AdminDashboard 
               teachers={teachers} setTeachers={updateTeachers}
@@ -198,7 +216,9 @@ const App: React.FC = () => {
             />
           ) : (
             <TeacherDashboard 
-              teacher={user as Teacher} submissions={submissions} setSubmissions={updateSubmissions}
+              teacher={user as Teacher} 
+              teachers={teachers}
+              submissions={submissions} setSubmissions={updateSubmissions}
               allSubmissions={submissions} isCloudEnabled={!!syncUrl}
               syncUrl={syncUrl} setSyncUrl={updateSyncUrl}
               onSendWarnings={triggerWarningEmails} onSendPdf={triggerCompiledPdfEmail}
@@ -213,7 +233,7 @@ const App: React.FC = () => {
              <i className="fas fa-school text-3xl"></i>
           </div>
           <div>
-            <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em]">Designed and developed by ASHUTOSH KUMAR GAUTAM</p>
+            <p className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-[0.3em]">Designed and developed by ASHUTOSH KUMAR GAUTAM</p>
             <p className="text-[10px] text-gray-300 font-bold mt-1">{SCHOOL_NAME}, Jhumri Telaiya</p>
           </div>
         </div>
