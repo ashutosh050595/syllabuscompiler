@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Teacher, WeeklySubmission, ClassLevel, Section, Submission } from '../types';
-import { getNextWeekMonday, ADMIN_EMAIL, INITIAL_TEACHERS, PORTAL_LINK } from '../constants';
+import { getNextWeekMonday, ADMIN_EMAIL, INITIAL_TEACHERS, PORTAL_LINK, getWhatsAppLink } from '../constants';
 import { generateSyllabusPDF } from '../services/pdfService';
 
 interface Props {
@@ -77,9 +77,12 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
   };
 
   const sendWhatsAppNudge = (teacher: Teacher, classKey: string) => {
-    if (!teacher.whatsapp) { alert("WhatsApp number not registered."); return; }
     const message = `Hi ${teacher.name}, your lesson plan for Class ${classKey} is pending for week ${nextWeek}.\n\nSubmit here: ${PORTAL_LINK}`;
-    const url = `https://wa.me/${teacher.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+    const url = getWhatsAppLink(teacher.whatsapp, message);
+    if (!url) {
+      alert("WhatsApp number not properly configured in Faculty Profile.");
+      return;
+    }
     window.open(url, '_blank');
   };
 

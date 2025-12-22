@@ -2,12 +2,6 @@
 /**
  * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v3)
  * 24/7 Autonomous Edition
- * 
- * SETUP INSTRUCTIONS:
- * 1. Deploy as Web App (Anyone access).
- * 2. In the Apps Script Editor, go to "Triggers" (Clock icon on left).
- * 3. Add a trigger for 'automatedDailyCheck' -> Time-driven -> Hour timer -> Every hour.
- *    OR run 'setupTriggers()' once from the editor to automate this.
  */
 
 const ROOT_FOLDER_NAME = "Sacred Heart Syllabus Reports";
@@ -83,19 +77,19 @@ function handlePlanSubmission(data) {
 
 /**
  * SERVER-SIDE SCHEDULER
- * This function should be triggered every hour via Apps Script Triggers.
+ * This function is triggered automatically every hour.
  */
 function automatedDailyCheck() {
   var now = new Date();
-  var day = now.getDay(); // 0=Sun, 4=Thu, 5=Fri, 6=Sat
+  var day = now.getDay(); 
   var hour = now.getHours();
   
-  // 1. Thursday, Friday, Saturday at 2:00 PM: Send Defaulter Reminders
+  // Thu, Fri, Sat at 2:00 PM (14:00)
   if ([4, 5, 6].includes(day) && hour === 14) {
     processServerSideReminders();
   }
   
-  // 2. Saturday at 9:00 PM: Compile and Email all Class Reports
+  // Sat at 9:00 PM (21:00)
   if (day === 6 && hour === 21) {
     processServerSideCompilation();
   }
@@ -103,7 +97,9 @@ function automatedDailyCheck() {
 
 function processServerSideReminders() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var registry = ss.getSheetByName(REGISTRY_SHEET).getDataRange().getValues();
+  var regSheet = ss.getSheetByName(REGISTRY_SHEET);
+  if (!regSheet) return;
+  var registry = regSheet.getDataRange().getValues();
   var submissions = ss.getSheetByName(SUBMISSIONS_SHEET).getDataRange().getValues();
   var nextMonday = getNextMondayStr();
   
@@ -115,7 +111,7 @@ function processServerSideReminders() {
   var defaulters = [];
   for (var j = 1; j < registry.length; j++) {
     var email = registry[j][2];
-    if (!submittedEmails.has(email)) {
+    if (email && !submittedEmails.has(email)) {
       defaulters.push({ name: registry[j][1], email: email });
     }
   }
@@ -127,11 +123,12 @@ function processServerSideReminders() {
 
 function processServerSideCompilation() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var registry = ss.getSheetByName(REGISTRY_SHEET).getDataRange().getValues();
+  var regSheet = ss.getSheetByName(REGISTRY_SHEET);
+  if (!regSheet) return;
+  var registry = regSheet.getDataRange().getValues();
   var submissions = ss.getSheetByName(SUBMISSIONS_SHEET).getDataRange().getValues();
   var week = getNextMondayStr();
   
-  // Group 1: Identify all unique classes (V-A, VI-B, etc)
   var classTeachers = [];
   for (var i = 1; i < registry.length; i++) {
     if (registry[i][5]) {
@@ -146,8 +143,6 @@ function processServerSideCompilation() {
   classTeachers.forEach(function(ct) {
     var cls = ct.info.classLevel;
     var sec = ct.info.section;
-    
-    // Filter submissions for this specific class
     var classPlans = [];
     for (var k = 1; k < submissions.length; k++) {
       if (submissions[k][1] === week && submissions[k][4] === cls && submissions[k][5] === sec) {
@@ -168,43 +163,39 @@ function processServerSideCompilation() {
 }
 
 function generateAndSendCloudPdf(ct, plans, week) {
-  var html = "<html><body style='font-family: Arial, sans-serif; padding: 20px;'>" +
-    "<h1 style='color: #003399; text-align: center; margin: 0;'>SACRED HEART SCHOOL</h1>" +
-    "<h3 style='text-align: center; color: #666; margin: 5px 0;'>WEEKLY SYLLABUS REPORT</h3>" +
-    "<hr/>" +
-    "<p><b>Class:</b> " + ct.info.classLevel + "-" + ct.info.section + " &nbsp;&nbsp; <b>Week Starting:</b> " + week + "</p>" +
-    "<p><b>Class Teacher:</b> " + ct.name + "</p>" +
-    "<table border='1' style='width: 100%; border-collapse: collapse; margin-top: 20px;'>" +
+  var html = "<html><body style='font-family: sans-serif; padding: 20px;'>" +
+    "<h1 style='color: #003399; text-align: center;'>SACRED HEART SCHOOL</h1>" +
+    "<h3 style='text-align: center; color: #666;'>WEEKLY SYLLABUS REPORT</h3>" +
+    "<p><b>Class:</b> " + ct.info.classLevel + "-" + ct.info.section + " | <b>Week:</b> " + week + "</p>" +
+    "<table border='1' style='width: 100%; border-collapse: collapse;'>" +
     "<tr style='background: #003399; color: white;'><th>Subject</th><th>Faculty</th><th>Chapter</th><th>Topics</th><th>Homework</th></tr>";
     
   plans.forEach(function(p) {
-    html += "<tr><td style='padding: 8px;'>" + p.subject + "</td>" +
-            "<td style='padding: 8px;'>" + p.teacherName + "</td>" +
-            "<td style='padding: 8px;'>" + p.chapter + "</td>" +
-            "<td style='padding: 8px; font-size: 11px;'>" + p.topics + "</td>" +
-            "<td style='padding: 8px; font-size: 11px;'>" + p.homework + "</td></tr>";
+    html += "<tr><td style='padding:8px;'>" + p.subject + "</td>" +
+            "<td style='padding:8px;'>" + p.teacherName + "</td>" +
+            "<td style='padding:8px;'>" + p.chapter + "</td>" +
+            "<td style='padding:8px;'>" + p.topics + "</td>" +
+            "<td style='padding:8px;'>" + p.homework + "</td></tr>";
   });
   
-  html += "</table><p style='font-size: 10px; color: #999; margin-top: 30px;'>Cloud Generated Academic Report - Sacred Heart School Automation</p></body></html>";
+  html += "</table></body></html>";
   
   var blob = Utilities.newBlob(html, "text/html", "Report.html");
   var pdf = blob.getAs("application/pdf").setName("Syllabus_" + ct.info.classLevel + ct.info.section + "_" + week + ".pdf");
   
-  // Archive in Drive
-  var folder = DriveApp.getFoldersByName(ROOT_FOLDER_NAME).next();
-  folder.createFile(pdf);
-  
-  // Send Email
-  GmailApp.sendEmail(ct.email, "AUTOGENERATED: Weekly Syllabus - Class " + ct.info.classLevel + "-" + ct.info.section, 
-    "Dear Class Teacher,\n\nPlease find the autogenerated weekly syllabus attached.\n\nRegards,\nSHS Cloud System", {
-    attachments: [pdf]
-  });
+  try {
+    var folder = DriveApp.getFoldersByName(ROOT_FOLDER_NAME).next();
+    folder.createFile(pdf);
+  } catch(e) {}
+
+  GmailApp.sendEmail(ct.email, "WEEKLY SYLLABUS: Class " + ct.info.classLevel + "-" + ct.info.section, 
+    "Please find attached the compiled syllabus report.\n\nPortal: " + PORTAL_URL, { attachments: [pdf] });
 }
 
 function handleWarningEmails(data) {
   data.defaulters.forEach(function(t) {
-    GmailApp.sendEmail(t.email, "URGENT: Lesson Plan Pending", 
-      "Dear " + t.name + ",\n\nYour lesson plan for week " + data.weekStarting + " is pending.\n\nSubmit here: " + (data.portalLink || PORTAL_URL));
+    GmailApp.sendEmail(t.email, "URGENT: Syllabus Submission Pending", 
+      "Dear " + t.name + ",\n\nYour weekly syllabus for week starting " + data.weekStarting + " is pending.\n\nPlease submit it here: " + (data.portalLink || PORTAL_URL));
   });
   return jsonResponse("success");
 }
@@ -212,7 +203,7 @@ function handleWarningEmails(data) {
 function handlePdfDelivery(data) {
   var decoded = Utilities.base64Decode(data.pdfBase64.split(',')[1]);
   var blob = Utilities.newBlob(decoded, 'application/pdf', data.filename);
-  GmailApp.sendEmail(data.recipient, "Syllabus Report", "Report attached.", { attachments: [blob] });
+  GmailApp.sendEmail(data.recipient, "Weekly Syllabus Compiled", "Find attached the compiled report.", { attachments: [blob] });
   return jsonResponse("success");
 }
 
@@ -228,7 +219,6 @@ function getNextMondayStr() {
   return nextMon.toISOString().split('T')[0];
 }
 
-/** Utility to setup triggers via code - Run this ONCE manually in editor */
 function setupTriggers() {
   var triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(function(t) { ScriptApp.deleteTrigger(t); });

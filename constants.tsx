@@ -6,13 +6,25 @@ export const SCHOOL_SUBTITLE = "(Affiliated to CBSE, New Delhi, upto +2 Level)";
 export const ADMIN_EMAIL = "admin@sacredheartkoderma.org";
 export const PORTAL_LINK = "https://syllabuscompiler-ruddy.vercel.app/";
 
-// UPDATE THIS LINE: Change "logo.png" to your actual filename or an absolute URL
 export const SCHOOL_LOGO_URL = "logo.png"; 
 
 export const CLASS_STYLES: Record<ClassLevel, { bg: string, text: string }> = {
   'V': { bg: 'bg-blue-600', text: 'text-blue-600' },
   'VI': { bg: 'bg-indigo-600', text: 'text-indigo-600' },
   'VII': { bg: 'bg-purple-600', text: 'text-purple-600' }
+};
+
+/**
+ * Generates a valid wa.me link. 
+ * If the number is 10 digits, it automatically adds the '91' country code for India.
+ */
+export const getWhatsAppLink = (phone: string | undefined, message: string) => {
+  if (!phone) return null;
+  let cleanNumber = phone.replace(/\D/g, '');
+  if (cleanNumber.length === 10) {
+    cleanNumber = '91' + cleanNumber;
+  }
+  return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
 };
 
 export const getCurrentWeekMonday = () => {
@@ -143,7 +155,6 @@ export const INITIAL_TEACHERS: Teacher[] = [
       { classLevel: 'VII', section: 'A', subject: 'English' },
       { classLevel: 'VII', section: 'B', subject: 'English' },
       { classLevel: 'VII', section: 'C', subject: 'English' },
-      // Fixed extra curly brace
       { classLevel: 'VII', section: 'D', subject: 'English' }
     ] 
   },
@@ -229,7 +240,6 @@ export const INITIAL_TEACHERS: Teacher[] = [
       { classLevel: 'VII', section: 'A', subject: 'Computer' },
       { classLevel: 'VII', section: 'B', subject: 'Computer' },
       { classLevel: 'VII', section: 'C', subject: 'Computer' },
-      // Fixed extra curly brace
       { classLevel: 'VII', section: 'D', subject: 'Computer' }
     ]
   }

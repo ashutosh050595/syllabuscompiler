@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Teacher, WeeklySubmission, ClassPlan, Submission, Section, ClassLevel } from '../types';
-import { getNextWeekMonday, CLASS_STYLES, INITIAL_TEACHERS, PORTAL_LINK } from '../constants';
+import { getNextWeekMonday, CLASS_STYLES, INITIAL_TEACHERS, PORTAL_LINK, getWhatsAppLink } from '../constants';
 import { refineSyllabusContent } from '../services/geminiService';
 import { generateSyllabusPDF } from '../services/pdfService';
 
@@ -120,7 +120,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
     if (!classStatus) return;
     const defaulters = classStatus.filter(s => !s.submitted).map(s => ({ name: s.teacherName, email: s.email }));
     if (defaulters.length === 0) {
-      alert("Excellent! All teachers have submitted plans for your class for the upcoming week.");
+      alert("Excellent! All teachers have submitted plans for your class.");
       return;
     }
     onSendWarnings(defaulters, nextWeek);
@@ -128,7 +128,6 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
 
   const handleMailCompiled = async () => {
     if (!teacher.isClassTeacher || !classStatus) return;
-    
     if (!syncUrl) {
       setView('setup');
       return;
@@ -171,13 +170,13 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
   };
 
   const sendPersonalNudge = (teacherName: string, whatsapp: string | undefined, subject: string) => {
-    if (!whatsapp) {
-      alert("WhatsApp number not registered for this teacher.");
+    const { classLevel, section } = teacher.isClassTeacher!;
+    const message = `Dear ${teacherName}, this is a gentle reminder that your lesson plan for Class ${classLevel}-${section} (${subject}) is pending for the upcoming week starting ${nextWeek}.\n\nPlease submit it on the SHS Portal here: ${PORTAL_LINK}`;
+    const url = getWhatsAppLink(whatsapp, message);
+    if (!url) {
+      alert("WhatsApp number not registered/configured for this teacher.");
       return;
     }
-    const { classLevel, section } = teacher.isClassTeacher!;
-    const message = `Dear ${teacherName}, this is a gentle reminder that your lesson plan for Class ${classLevel}-${section} (${subject}) is pending for the upcoming week starting ${nextWeek}.\n\nPlease submit it on the SHS Portal here: ${PORTAL_LINK}\n\nThank you.`;
-    const url = `https://wa.me/${whatsapp.startsWith('+') ? whatsapp.substring(1) : whatsapp}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
@@ -217,7 +216,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><i className="fas fa-cloud-bolt"></i></div>
              <h3 className="text-xl font-black text-gray-800 uppercase tracking-tight">Cloud Configuration (Class Teacher)</h3>
           </div>
-          <p className="text-sm text-gray-500 mb-6">If the "Mail PDF" button is disabled on this device, paste the <b>Deployment URL</b> provided by the Admin below. This setting is stored locally on this phone/browser.</p>
+          <p className="text-sm text-gray-500 mb-6">If the "Mail PDF" button is disabled on this device, paste the <b>Deployment URL</b> provided by the Admin below.</p>
           <div className="space-y-4">
              <input 
                type="url" 
@@ -294,7 +293,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
               )}
 
               <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-gray-100">
-                <h3 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">My Personal Assignments for Next Week</h3>
+                <h3 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">My Personal Assignments</h3>
                 <div className="space-y-4">
                   {groupedAssignments.map(g => {
                     const isDone = currentSubmission?.plans.some(p => p.subject === g.subject && p.classLevel === g.classLevel);
@@ -346,7 +345,7 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
           <div className="bg-gray-800 p-12 text-white flex justify-between items-center">
              <div>
                <h3 className="text-4xl font-black tracking-tight">Academic Planning</h3>
-               <p className="text-gray-400 font-bold text-sm mt-2 uppercase tracking-widest">Planning for Upcoming Week Starting: {nextWeek}</p>
+               <p className="text-gray-400 font-bold text-sm mt-2 uppercase tracking-widest">Upcoming Week Starting: {nextWeek}</p>
              </div>
              <button type="button" onClick={() => setView('status')} className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"><i className="fas fa-times text-xl"></i></button>
           </div>
@@ -371,20 +370,20 @@ const TeacherDashboard: React.FC<Props> = ({ teacher, submissions, setSubmission
                        <h4 className="text-3xl font-black text-gray-800 tracking-tight">{g.subject} <span className="text-sm font-bold text-gray-400">({g.classLevel}-{g.sections.join(',')})</span></h4>
                        <div className="space-y-6">
                           <div>
-                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Name of the Chapter to be taught in upcoming week *</label>
+                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Chapter Name *</label>
                              <input required type="text" className="w-full px-8 py-5 rounded-[2rem] bg-gray-50 border-gray-100 border outline-none font-bold" placeholder="Enter chapter title..." value={formData[g.id]?.chapter || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], chapter: e.target.value } })} />
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                              <div className="space-y-3">
                                 <div className="flex justify-between items-center px-1">
-                                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Topics/Subtopics of the Chapter to be taught *</label>
+                                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Planned Topics *</label>
                                    <button type="button" onClick={() => handleRefine(g.id, 'topics')} className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full uppercase"><i className="fas fa-magic"></i> AI Polish</button>
                                 </div>
                                 <textarea required rows={5} className="w-full px-8 py-6 rounded-[2.5rem] bg-gray-50 border-gray-100 border outline-none text-sm font-medium" placeholder="Break down the topics..." value={formData[g.id]?.topics || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], topics: e.target.value } })} />
                              </div>
                              <div className="space-y-3">
                                 <div className="flex justify-between items-center px-1">
-                                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Proposed Home Work *</label>
+                                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Homework *</label>
                                    <button type="button" onClick={() => handleRefine(g.id, 'homework')} className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full uppercase"><i className="fas fa-magic"></i> AI Polish</button>
                                 </div>
                                 <textarea required rows={5} className="w-full px-8 py-6 rounded-[2.5rem] bg-gray-50 border-gray-100 border outline-none text-sm font-medium" placeholder="Assign homework..." value={formData[g.id]?.homework || ''} onChange={e => setFormData({ ...formData, [g.id]: { ...formData[g.id], homework: e.target.value } })} />
