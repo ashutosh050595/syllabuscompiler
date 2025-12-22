@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Teacher, WeeklySubmission, ClassLevel, Section, Submission, AssignedClass, ResubmitRequest } from '../types';
 import { getNextWeekMonday, getWhatsAppLink, ALL_CLASSES, ALL_SECTIONS, SCHOOL_NAME } from '../constants';
@@ -300,7 +299,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                     <div key={cls} className="bg-white border-2 border-gray-50 p-8 rounded-[3rem] hover:border-blue-100 transition-all">
                       <h4 className="font-black text-gray-900 text-xl mb-4">Class {cls}</h4>
                       <div className="space-y-4">
-                        {list.map(t => (
+                        {(list as Teacher[]).map(t => (
                           <div key={t.id} className="flex items-center justify-between">
                             <span className="text-xs font-bold text-gray-600">{t.name}</span>
                             <div className="flex gap-1">

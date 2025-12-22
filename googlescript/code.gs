@@ -94,6 +94,46 @@ function handlePlanSubmission(data) {
   data.plans.forEach(function(p) {
     sheet.appendRow([new Date(), data.weekStarting, data.teacherName, data.teacherEmail, p.classLevel, p.section, p.subject, p.chapterName, p.topics, p.homework]);
   });
+
+  // SEND CONFIRMATION EMAIL TO TEACHER
+  try {
+    var startDate = new Date(data.weekStarting);
+    var endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 5); // Add 5 days for Saturday
+    var dateToStr = endDate.toISOString().split('T')[0];
+
+    var subject = "Confirmation: Lesson Plan Submitted (" + data.weekStarting + " to " + dateToStr + ")";
+    var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+      "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+      "<p>Dear " + data.teacherName + ",</p>" +
+      "<p>Your lesson plan for the week <b>" + data.weekStarting + "</b> to <b>" + dateToStr + "</b> has been successfully submitted.</p>" +
+      "<p><b>Classes Included:</b></p><ul>";
+
+    // Deduplicate subjects for cleaner email
+    var uniqueSubjects = [];
+    var seen = {};
+    data.plans.forEach(function(p) {
+      var key = p.classLevel + "-" + p.section + ": " + p.subject;
+      if (!seen[key]) {
+        uniqueSubjects.push("<li>" + key + "</li>");
+        seen[key] = true;
+      }
+    });
+    
+    htmlBody += uniqueSubjects.join("") + "</ul>" +
+      "<p>This is an automated confirmation. You can view your submission history in the portal.</p>" +
+      "<br><p>Best Regards,</p>" +
+      "<p><b>Academic Administration</b><br>Sacred Heart School</p>" +
+      "</div>";
+
+    GmailApp.sendEmail(data.teacherEmail, subject, "", {
+      name: "Sacred Heart School",
+      htmlBody: htmlBody
+    });
+  } catch (e) {
+    console.error("Error sending confirmation email: " + e.toString());
+  }
+
   return jsonResponse("success");
 }
 
