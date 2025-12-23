@@ -18,6 +18,7 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
   const [imgError, setImgError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isFocused, setIsFocused] = useState({ email: false, password: false });
+  const [activeButton, setActiveButton] = useState<'teacher' | 'admin'>('teacher');
 
   useEffect(() => {
     // Add floating effect to decorative elements
@@ -26,6 +27,18 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
       (el as HTMLElement).style.animationDelay = `${i * 0.2}s`;
     });
   }, []);
+
+  // Set mode when button is clicked
+  useEffect(() => {
+    if (activeButton === 'teacher') {
+      setIsAdminMode(false);
+      setError('');
+      setPassword('');
+    } else {
+      setIsAdminMode(true);
+      setError('');
+    }
+  }, [activeButton]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,79 +103,94 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
         {/* Main card */}
         <div className="glass-effect rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/30 backdrop-blur-xl">
           {/* Header section with gradient */}
-          <div className="relative p-8 md:p-12 text-center bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white overflow-hidden">
+          <div className="relative p-6 md:p-8 lg:p-12 text-center bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white overflow-hidden">
             {/* Animated background pattern */}
             <div className="absolute inset-0 opacity-10">
               <div className="absolute top-0 left-0 w-32 h-32 border-2 border-white rounded-full -translate-x-1/2 -translate-y-1/2"></div>
               <div className="absolute bottom-0 right-0 w-32 h-32 border-2 border-white rounded-full translate-x-1/2 translate-y-1/2"></div>
             </div>
-            
-            {/* Admin/Teacher toggle */}
-            <div className="absolute top-6 right-6">
-              <button 
-                type="button"
-                onClick={() => { setIsAdminMode(!isAdminMode); setError(''); setPassword(''); }}
-                className={`relative px-4 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all duration-300 ${isAdminMode ? 'bg-white/30 text-white' : 'bg-white/10 text-white/90 hover:bg-white/20'}`}
-              >
-                <span className="flex items-center gap-2">
-                  <i className={`fas ${isAdminMode ? 'fa-user-shield' : 'fa-chalkboard-user'}`}></i>
-                  {isAdminMode ? 'Admin Mode' : 'Teacher Mode'}
-                </span>
-                <span className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-12 h-0.5 bg-white/50 rounded-full"></span>
-              </button>
-            </div>
 
             {/* Logo and school info */}
             <div className="relative z-10">
-              <div className="w-24 h-24 md:w-28 md:h-28 mx-auto mb-6 bg-gradient-to-br from-white to-blue-100 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/30 transform transition-transform hover:scale-105 duration-300 animate-float">
-                <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center">
+              <div className="w-20 h-20 md:w-24 md:h-24 mx-auto mb-4 md:mb-6 bg-gradient-to-br from-white to-blue-100 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/30 transform transition-transform hover:scale-105 duration-300 animate-float">
+                <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center">
                   {imgError ? (
                     <div className="text-white flex flex-col items-center">
-                      <i className="fas fa-graduation-cap text-4xl"></i>
+                      <i className="fas fa-graduation-cap text-3xl md:text-4xl"></i>
                       <span className="text-xs font-black mt-1 uppercase tracking-widest">SHS</span>
                     </div>
                   ) : (
                     <img 
                       src={SCHOOL_LOGO_URL} 
                       alt="School Logo" 
-                      className="w-16 h-16 object-contain" 
+                      className="w-12 h-12 md:w-16 md:h-16 object-contain" 
                       onError={() => setImgError(true)} 
                     />
                   )}
                 </div>
               </div>
               
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">
-                {isAdminMode ? 'Admin Portal' : 'Faculty Login'}
+              <h1 className="text-2xl md:text-3xl lg:text-4xl font-black tracking-tight mb-2">
+                Academic Portal
               </h1>
-              <p className="text-blue-100/90 text-sm font-medium tracking-wide">
-                {SCHOOL_NAME} • Academic Management System
+              <p className="text-blue-100/90 text-xs md:text-sm font-medium tracking-wide mb-4 md:mb-6">
+                {SCHOOL_NAME}
               </p>
-              <div className="mt-4 flex items-center justify-center gap-2 text-xs">
+              
+              {/* Two separate buttons for Teacher/Admin - Mobile Optimized */}
+              <div className="flex flex-row md:flex-row gap-3 md:gap-4 justify-center mb-4">
+                <button
+                  type="button"
+                  onClick={() => setActiveButton('teacher')}
+                  className={`flex-1 py-3 px-4 md:py-4 md:px-6 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 ${
+                    activeButton === 'teacher'
+                      ? 'bg-white text-blue-700 shadow-lg shadow-white/20'
+                      : 'bg-white/10 text-white/90 hover:bg-white/20'
+                  }`}
+                >
+                  <i className={`fas ${activeButton === 'teacher' ? 'fa-chalkboard-teacher' : 'fa-user-tie'} text-sm md:text-base`}></i>
+                  <span className="text-xs md:text-sm font-bold">Teacher Login</span>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => setActiveButton('admin')}
+                  className={`flex-1 py-3 px-4 md:py-4 md:px-6 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 ${
+                    activeButton === 'admin'
+                      ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
+                      : 'bg-white/10 text-white/90 hover:bg-white/20'
+                  }`}
+                >
+                  <i className={`fas ${activeButton === 'admin' ? 'fa-shield-alt' : 'fa-user-shield'} text-sm md:text-base`}></i>
+                  <span className="text-xs md:text-sm font-bold">Admin Login</span>
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-center gap-2 text-xs">
                 <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
-                <span className="font-medium">Live Cloud Sync Active</span>
+                <span className="font-medium text-xs">Live Cloud Sync Active</span>
               </div>
             </div>
           </div>
 
           {/* Login form */}
-          <form onSubmit={handleLogin} className="p-8 md:p-12 space-y-8">
+          <form onSubmit={handleLogin} className="p-6 md:p-8 lg:p-12 space-y-6 md:space-y-8">
             {error && (
-              <div className="animate-in slide-in-from-top-4 p-4 bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 text-red-600 rounded-2xl flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 flex items-center justify-center">
+              <div className="animate-in slide-in-from-top-4 p-3 md:p-4 bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 text-red-600 rounded-2xl flex items-start gap-3">
+                <div className="flex-shrink-0 w-5 h-5 md:w-6 md:h-6 rounded-full bg-red-100 flex items-center justify-center">
                   <i className="fas fa-exclamation text-xs"></i>
                 </div>
-                <div>
-                  <p className="font-bold">{error}</p>
+                <div className="flex-1">
+                  <p className="font-bold text-sm">{error}</p>
                   <p className="text-xs opacity-75 mt-1">Please check your credentials and try again</p>
                 </div>
               </div>
             )}
 
-            <div className="space-y-6">
+            <div className="space-y-4 md:space-y-6">
               {/* Email field */}
               <div className="group">
-                <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-3 ml-1">
+                <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">
                   <span className="flex items-center gap-2">
                     <i className="fas fa-envelope text-xs"></i>
                     Official Email Address
@@ -171,15 +199,15 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
                 <div className={`relative transition-all duration-300 ${isFocused.email ? 'transform -translate-y-1' : ''}`}>
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-2xl blur-md opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   <div className="relative flex items-center">
-                    <div className="absolute left-4 w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg">
-                      <i className="fas fa-at"></i>
+                    <div className="absolute left-3 md:left-4 w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg">
+                      <i className="fas fa-at text-sm"></i>
                     </div>
                     <input
                       type="email"
                       required
                       disabled={isVerifying}
-                      className="w-full pl-20 pr-6 py-4 rounded-2xl border-2 border-gray-100 bg-white/50 focus:bg-white focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-semibold text-gray-700 placeholder-gray-400 disabled:opacity-50"
-                      placeholder="teacher@sacredheartkoderma.org"
+                      className="w-full pl-12 md:pl-14 pr-4 md:pr-6 py-3 md:py-4 rounded-2xl border-2 border-gray-100 bg-white/50 focus:bg-white focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-semibold text-gray-700 placeholder-gray-400 disabled:opacity-50 text-sm md:text-base"
+                      placeholder={activeButton === 'teacher' ? "teacher@sacredheartkoderma.org" : "admin@sacredheartkoderma.org"}
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       onFocus={() => setIsFocused(prev => ({ ...prev, email: true }))}
@@ -190,9 +218,9 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
               </div>
 
               {/* Password field (Admin only) */}
-              {isAdminMode && (
+              {activeButton === 'admin' && (
                 <div className="group animate-in slide-in-from-top-2">
-                  <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-3 ml-1">
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">
                     <span className="flex items-center gap-2">
                       <i className="fas fa-key text-xs"></i>
                       Admin Passphrase
@@ -201,13 +229,13 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
                   <div className={`relative transition-all duration-300 ${isFocused.password ? 'transform -translate-y-1' : ''}`}>
                     <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-2xl blur-md opacity-0 group-hover:opacity-100 transition-opacity"></div>
                     <div className="relative flex items-center">
-                      <div className="absolute left-4 w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white shadow-lg">
-                        <i className="fas fa-lock"></i>
+                      <div className="absolute left-3 md:left-4 w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white shadow-lg">
+                        <i className="fas fa-lock text-sm"></i>
                       </div>
                       <input
                         type={showPassword ? "text" : "password"}
                         required
-                        className="w-full pl-20 pr-14 py-4 rounded-2xl border-2 border-gray-100 bg-white/50 focus:bg-white focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-all font-semibold text-gray-700 placeholder-gray-400"
+                        className="w-full pl-12 md:pl-14 pr-12 md:pr-14 py-3 md:py-4 rounded-2xl border-2 border-gray-100 bg-white/50 focus:bg-white focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-all font-semibold text-gray-700 placeholder-gray-400 text-sm md:text-base"
                         placeholder="••••••••••"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
@@ -217,9 +245,9 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-4 text-gray-400 hover:text-purple-600 transition-colors"
+                        className="absolute right-3 md:right-4 text-gray-400 hover:text-purple-600 transition-colors"
                       >
-                        <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                        <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-sm`}></i>
                       </button>
                     </div>
                   </div>
@@ -231,26 +259,28 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
             <button
               type="submit"
               disabled={isVerifying}
-              className="group relative w-full py-5 px-8 rounded-2xl shadow-xl transform transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+              className="group relative w-full py-4 md:py-5 px-6 md:px-8 rounded-2xl shadow-xl transform transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
             >
               {/* Animated background */}
               <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 group-hover:from-blue-700 group-hover:via-indigo-700 group-hover:to-purple-800 transition-all"></div>
               <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity shimmer"></div>
               
               {/* Button content */}
-              <div className="relative flex items-center justify-center gap-4">
+              <div className="relative flex items-center justify-center gap-3 md:gap-4">
                 {isVerifying ? (
                   <>
-                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span className="font-black text-white tracking-wide">Verifying with Cloud...</span>
+                    <div className="w-5 h-5 md:w-6 md:h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span className="font-bold md:font-black text-white text-sm md:text-base tracking-wide">
+                      Verifying with Cloud...
+                    </span>
                   </>
                 ) : (
                   <>
-                    <span className="font-black text-white text-lg tracking-wide">
-                      {isAdminMode ? 'Authenticate as Admin' : 'Access Dashboard'}
+                    <span className="font-bold md:font-black text-white text-sm md:text-lg tracking-wide">
+                      {activeButton === 'admin' ? 'Authenticate as Admin' : 'Access Dashboard'}
                     </span>
-                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center transform group-hover:translate-x-2 transition-transform">
-                      <i className="fas fa-arrow-right text-white"></i>
+                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/20 flex items-center justify-center transform group-hover:translate-x-1 md:group-hover:translate-x-2 transition-transform">
+                      <i className="fas fa-arrow-right text-white text-sm"></i>
                     </div>
                   </>
                 )}
@@ -261,12 +291,12 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
             </button>
 
             {/* Additional info */}
-            <div className="pt-4 border-t border-gray-100">
+            <div className="pt-3 md:pt-4 border-t border-gray-100">
               <p className="text-center text-xs text-gray-500">
                 <i className="fas fa-shield-alt mr-1"></i>
                 Secure portal • Cloud-synced • Encrypted communication
               </p>
-              <p className="text-center text-[10px] text-gray-400 mt-2">
+              <p className="text-center text-[10px] text-gray-400 mt-1 md:mt-2">
                 Need help? Contact system administrator
               </p>
             </div>
@@ -274,12 +304,20 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
         </div>
 
         {/* Footer note */}
-        <div className="mt-8 text-center">
+        <div className="mt-6 md:mt-8 text-center">
           <p className="text-xs text-gray-500 font-medium">
-            <span className="inline-block px-3 py-1 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10">
+            <span className="inline-block px-3 py-1.5 md:py-1 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 text-xs">
               <i className="fas fa-cloud-arrow-up mr-1"></i>
               Real-time sync with school database
             </span>
+          </p>
+        </div>
+
+        {/* Mobile touch hint (only on small screens) */}
+        <div className="block md:hidden mt-6 text-center">
+          <p className="text-[10px] text-gray-400 font-medium">
+            <i className="fas fa-hand-point-up mr-1"></i>
+            Tap buttons to switch between Teacher and Admin login
           </p>
         </div>
       </div>
