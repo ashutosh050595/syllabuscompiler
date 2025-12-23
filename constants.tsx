@@ -14,6 +14,10 @@ export const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbzneUwW
 
 export const SCHOOL_LOGO_URL = "logo.png"; 
 
+// Storage Keys
+export const OFFLINE_SUBMISSIONS_KEY = 'sh_offline_submissions_v3';
+export const SUBMISSION_RETRY_KEY = 'sh_submission_retry_v2';
+
 export const ALL_CLASSES: ClassLevel[] = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
 export const ALL_SECTIONS: Section[] = ['A', 'B', 'C', 'D'];
 

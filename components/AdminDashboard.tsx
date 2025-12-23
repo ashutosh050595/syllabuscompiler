@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Teacher, WeeklySubmission, ClassLevel, Section, Submission, AssignedClass, ResubmitRequest } from '../types';
-import { getNextWeekMonday, getWhatsAppLink, ALL_CLASSES, ALL_SECTIONS, SCHOOL_NAME } from '../constants';
+import { getNextWeekMonday, getWhatsAppLink, ALL_CLASSES, ALL_SECTIONS, SCHOOL_NAME, OFFLINE_SUBMISSIONS_KEY, SUBMISSION_RETRY_KEY } from '../constants';
 import { generateSyllabusPDF } from '../services/pdfService';
 
 interface Props {
@@ -16,14 +17,15 @@ interface Props {
   onSendPdf: (pdfBase64: string, recipient: string, className: string, filename: string) => Promise<any>;
   onResetRegistry?: () => Promise<void>;
   onForceReset?: (teacherId: string, week: string) => Promise<void>;
-  onForceResetAll?: (week: string) => Promise<void>;
+  onForceSyncAll?: () => Promise<void>;
   onRefreshData?: () => Promise<boolean>;
   lastSync: Date | null;
 }
 
-const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, setSyncUrl, onSendWarnings, onSendPdf, onResetRegistry, onForceReset, onForceResetAll, onRefreshData, lastSync }) => {
+const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, setSyncUrl, onSendWarnings, onSendPdf, onResetRegistry, onForceReset, onForceSyncAll, onRefreshData, lastSync }) => {
   const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'requests' | 'settings' | 'archive'>('monitor');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingSyncs, setPendingSyncs] = useState<any[]>([]);
   const nextWeek = getNextWeekMonday();
 
   const missingTeachers = useMemo(() => {
@@ -50,6 +52,18 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
     });
     return res;
   }, [missingTeachers]);
+
+  useEffect(() => {
+    const checkUnsynced = () => {
+      const queue = JSON.parse(localStorage.getItem(OFFLINE_SUBMISSIONS_KEY) || '[]');
+      const retryQueue = JSON.parse(localStorage.getItem(SUBMISSION_RETRY_KEY) || '[]');
+      setPendingSyncs([...queue, ...retryQueue]);
+    };
+    
+    checkUnsynced();
+    const interval = setInterval(checkUnsynced, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleManualRefresh = async () => {
     if (!onRefreshData) return;
@@ -82,7 +96,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
            </div>
            {pendingRequests.length > 0 && (
              <button onClick={() => setActiveTab('requests')} className="bg-amber-500 text-white px-6 py-4 rounded-3xl font-black uppercase text-xs animate-bounce shadow-lg shadow-amber-200">
-               {pendingRequests.length} Resubmit Requests
+               {pendingRequests.length} Requests
              </button>
            )}
         </div>
@@ -100,27 +114,44 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
         <div className="p-8 md:p-12">
           {activeTab === 'monitor' && (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
-              <div>
-                <h3 className="text-2xl font-black text-gray-800 mb-8">Pending Faculy ({missingTeachers.length})</h3>
-                <div className="space-y-6">
-                  {/* Fixed type error: cast Object.entries output to ensure 'list' is correctly typed as Teacher[] to resolve 'unknown' map error */}
-                  {(Object.entries(defaultersByClass) as [string, Teacher[]][]).map(([cls, list]) => (
-                    <div key={cls} className="bg-gray-50 p-6 rounded-[2.5rem]">
-                      <h4 className="font-black text-gray-900 text-lg mb-4">Class {cls}</h4>
-                      <div className="space-y-3">
-                        {list.map(t => (
-                          <div key={t.id} className="flex items-center justify-between text-xs font-bold text-gray-600">
-                            <span>{t.name}</span>
-                            <div className="flex gap-2">
-                               <button onClick={() => window.open(getWhatsAppLink(t.whatsapp, `Reminder for ${cls}: Syllabus is pending.`) || '', '_blank')} className="text-emerald-600"><i className="fab fa-whatsapp"></i></button>
-                               <button onClick={() => onSendWarnings([{name: t.name, email: t.email}], nextWeek)} className="text-blue-600 uppercase text-[9px]">Email</button>
+              <div className="space-y-10">
+                <div>
+                  <h3 className="text-2xl font-black text-gray-800 mb-8">Pending Faculty ({missingTeachers.length})</h3>
+                  <div className="space-y-6">
+                    {(Object.entries(defaultersByClass) as [string, Teacher[]][]).map(([cls, list]) => (
+                      <div key={cls} className="bg-gray-50 p-6 rounded-[2.5rem]">
+                        <h4 className="font-black text-gray-900 text-lg mb-4">Class {cls}</h4>
+                        <div className="space-y-3">
+                          {list.map(t => (
+                            <div key={t.id} className="flex items-center justify-between text-xs font-bold text-gray-600">
+                              <span>{t.name}</span>
+                              <div className="flex gap-2">
+                                 <button onClick={() => window.open(getWhatsAppLink(t.whatsapp, `Reminder for ${cls}: Syllabus is pending.`) || '', '_blank')} className="text-emerald-600"><i className="fab fa-whatsapp"></i></button>
+                                 <button onClick={() => onSendWarnings([{name: t.name, email: t.email}], nextWeek)} className="text-blue-600 uppercase text-[9px]">Email</button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
+
+                {pendingSyncs.length > 0 && (
+                  <div className="bg-amber-50 p-8 rounded-[2.5rem] border border-amber-100">
+                    <h4 className="text-sm font-black text-amber-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <i className="fas fa-wifi-slash"></i> 
+                      Local Outbox ({pendingSyncs.length})
+                    </h4>
+                    <p className="text-xs text-amber-600 mb-6 font-medium">This device has unsynced data that hasn't reached the server yet.</p>
+                    <button 
+                      onClick={onForceSyncAll}
+                      className="w-full bg-amber-600 text-white py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all shadow-lg shadow-amber-100"
+                    >
+                      Force Sync Local Outbox
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -155,7 +186,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                      <button onClick={() => onApproveResubmit(req.id)} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs">Approve & Clear Previous</button>
                   </div>
                 ))
-              ) : <p className="text-center py-20 text-gray-400 font-bold uppercase tracking-widest">No pending requests from any device</p>}
+              ) : <p className="text-center py-20 text-gray-400 font-bold uppercase tracking-widest">No pending requests</p>}
             </div>
           )}
           
@@ -165,7 +196,12 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Cloud Sync URL</label>
                   <input type="text" className="w-full px-6 py-4 rounded-xl bg-white border font-bold text-sm" value={syncUrl} onChange={(e) => setSyncUrl(e.target.value)} />
                </div>
-               <button onClick={onResetRegistry} className="text-red-500 font-black uppercase text-xs tracking-widest"><i className="fas fa-database mr-2"></i> Factory Reset Database</button>
+               <div className="flex flex-col gap-4">
+                 <button onClick={onForceSyncAll} className="text-left bg-blue-50 text-blue-600 p-6 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-blue-100 transition-all border border-blue-100">
+                    <i className="fas fa-sync-alt mr-2"></i> Force Push Local Queues to Cloud
+                 </button>
+                 <button onClick={onResetRegistry} className="text-left text-red-500 font-black uppercase text-xs tracking-widest p-6"><i className="fas fa-database mr-2"></i> Factory Reset Local Registry</button>
+               </div>
             </div>
           )}
         </div>

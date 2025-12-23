@@ -4,13 +4,17 @@ import { Teacher, WeeklySubmission, ClassLevel, Section, Submission, ResubmitReq
 import Login from './components/Login';
 import TeacherDashboard from './components/TeacherDashboard';
 import AdminDashboard from './components/AdminDashboard';
-import { SCHOOL_NAME, INITIAL_TEACHERS, getCurrentWeekMonday, getNextWeekMonday, SCHOOL_LOGO_URL, PORTAL_LINK, DEFAULT_SYNC_URL } from './constants';
-
-// ==========================================
-// ULTRA-RELIABLE SUBMISSION SYSTEM CONSTANTS
-// ==========================================
-const OFFLINE_SUBMISSIONS_KEY = 'sh_offline_submissions_v3';
-const SUBMISSION_RETRY_KEY = 'sh_submission_retry_v2';
+import { 
+  SCHOOL_NAME, 
+  INITIAL_TEACHERS, 
+  getCurrentWeekMonday, 
+  getNextWeekMonday, 
+  SCHOOL_LOGO_URL, 
+  PORTAL_LINK, 
+  DEFAULT_SYNC_URL,
+  OFFLINE_SUBMISSIONS_KEY,
+  SUBMISSION_RETRY_KEY
+} from './constants';
 
 // Track submission attempts globally
 let globalSubmissionQueue: any[] = [];
@@ -46,14 +50,13 @@ const App: React.FC = () => {
   // ===== LAYER 1: Local Storage (ALWAYS WORKS) =====
   const saveSubmissionLocally = (action: string, payload: any) => {
     try {
-      const key = `${action}_${payload.teacherEmail || 'admin'}_${Date.now()}`;
+      const key = `loc_${action}_${payload.teacherEmail || 'admin'}_${Date.now()}`;
       localStorage.setItem(key, JSON.stringify({
         ...payload,
         _localTimestamp: new Date().toISOString(),
         _device: navigator.userAgent.substring(0, 100)
       }));
       
-      // Also add to queue for sync
       const queue = JSON.parse(localStorage.getItem(OFFLINE_SUBMISSIONS_KEY) || '[]');
       queue.push({ id: payload._sid, action, payload, timestamp: Date.now(), attempts: 0 });
       localStorage.setItem(OFFLINE_SUBMISSIONS_KEY, JSON.stringify(queue));
@@ -61,29 +64,23 @@ const App: React.FC = () => {
       
       return { success: true };
     } catch (e) {
-      // If localStorage is full, use sessionStorage
       sessionStorage.setItem('emergency_submission', JSON.stringify(payload));
       return { success: true };
     }
   };
 
   // ===== LAYER 2: Multiple Cloud Methods =====
-
-  // Method 1: Modern Fetch API
   const cloudPostMethod1 = async (url: string, payload: any): Promise<{success: boolean}> => {
     return new Promise(async (resolve) => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 8000);
         
-        // Use no-cors for Google Apps Script to avoid pre-flight issues on mobile
         const response = await fetch(url, {
           method: 'POST',
           mode: 'no-cors',
           signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ [JSON.stringify(payload)]: '' })
         });
         
@@ -95,7 +92,6 @@ const App: React.FC = () => {
     });
   };
 
-  // Method 2: XMLHttpRequest (works on older browsers)
   const cloudPostMethod2 = (url: string, payload: any): Promise<{success: boolean}> => {
     return new Promise((resolve) => {
       try {
@@ -113,7 +109,6 @@ const App: React.FC = () => {
     });
   };
 
-  // Method 3: Form Submission (works on EVERY device)
   const cloudPostMethod3 = (url: string, payload: any): Promise<{success: boolean}> => {
     return new Promise((resolve) => {
       try {
@@ -150,7 +145,6 @@ const App: React.FC = () => {
     });
   };
 
-  // Main submission function - ALWAYS succeeds
   const submitWith100PercentReliability = async (
     action: string,
     payload: any,
@@ -158,20 +152,16 @@ const App: React.FC = () => {
   ): Promise<{success: boolean, id?: string, message: string}> => {
     if (!url || !url.startsWith('http')) return { success: false, message: 'Invalid Sync URL' };
     
-    // Generate unique ID for tracking
     const submissionId = payload._sid || `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const enhancedPayload = { ...payload, action, _sid: submissionId, _ts: Date.now() };
     
-    // LAYER 1: Save locally IMMEDIATELY (always works)
     saveSubmissionLocally(action, enhancedPayload);
     
-    // LAYER 2: Try different cloud methods (Race Method 1 and 2)
     const cloudResults = await (Promise as any).any([
       cloudPostMethod1(url, enhancedPayload),
       cloudPostMethod2(url, enhancedPayload),
     ]).catch(() => ({ success: false }));
     
-    // LAYER 3: If fast methods fail, trigger Form Submit and add to Retry
     if (!cloudResults.success) {
       cloudPostMethod3(url, enhancedPayload);
       addToRetryQueue(submissionId, action, enhancedPayload, url);
@@ -181,27 +171,17 @@ const App: React.FC = () => {
       success: true,
       id: submissionId,
       message: cloudResults.success 
-        ? 'Submitted to cloud successfully' 
-        : 'Saved locally - will sync automatically'
+        ? 'Submitted successfully' 
+        : 'Saved locally - syncing in background'
     };
   };
 
   // ===== LAYER 3: Retry Engine =====
   const addToRetryQueue = (id: string, action: string, payload: any, url: string) => {
-    const retryItem = {
-      id,
-      action,
-      payload,
-      url,
-      timestamp: Date.now(),
-      attempts: 0,
-      nextRetry: Date.now() + 30000 
-    };
-    
+    const retryItem = { id, action, payload, url, timestamp: Date.now(), attempts: 0, nextRetry: Date.now() + 30000 };
     const retryQueue = JSON.parse(localStorage.getItem(SUBMISSION_RETRY_KEY) || '[]');
     retryQueue.push(retryItem);
     localStorage.setItem(SUBMISSION_RETRY_KEY, JSON.stringify(retryQueue));
-    
     startRetryEngine();
   };
 
@@ -235,31 +215,10 @@ const App: React.FC = () => {
           item.nextRetry = Date.now() + (30000 * item.attempts);
         }
       }
-      
       localStorage.setItem(SUBMISSION_RETRY_KEY, JSON.stringify(retryQueue));
     }, 15000); 
   };
 
-  // ===== LAYER 4: Verification =====
-  const verifySubmission = async (url: string, submissionId: string): Promise<boolean> => {
-    try {
-      const verifyUrl = `${url}${url.includes('?') ? '&' : '?'}verify=${submissionId}&t=${Date.now()}`;
-      const response = await fetch(verifyUrl, { method: 'GET', redirect: 'follow' });
-      const data = await response.json();
-      
-      if (data.submissions) {
-        return data.submissions.some((s: any) => 
-          s._sid === submissionId || 
-          (s.timestamp && Date.now() - new Date(s.timestamp).getTime() < 300000)
-        );
-      }
-      return false;
-    } catch (e) {
-      return false;
-    }
-  };
-
-  // ===== Service Worker for Background Sync =====
   const registerServiceWorker = () => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js')
@@ -301,7 +260,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Polling Effect
   useEffect(() => {
     let interval: any;
     if (user && 'isAdmin' in user && syncUrl) {
@@ -394,6 +352,22 @@ const App: React.FC = () => {
     }
   };
 
+  const handleForceSyncAll = async () => {
+    const queue = JSON.parse(localStorage.getItem(OFFLINE_SUBMISSIONS_KEY) || '[]');
+    const retry = JSON.parse(localStorage.getItem(SUBMISSION_RETRY_KEY) || '[]');
+    const combined = [...queue, ...retry];
+    
+    for (const item of combined) {
+      await submitWith100PercentReliability(item.action, item.payload, syncUrl);
+    }
+    
+    // Clear queues if combined empty or after manual push attempt
+    localStorage.removeItem(OFFLINE_SUBMISSIONS_KEY);
+    localStorage.removeItem(SUBMISSION_RETRY_KEY);
+    
+    fetchRegistryFromCloud(syncUrl);
+  };
+
   const updateTeachers = (newTeachers: Teacher[]) => {
     setTeachers(newTeachers);
     teachersRef.current = newTeachers;
@@ -464,6 +438,7 @@ const App: React.FC = () => {
               onSendPdf={async (p, r, c, f) => submitWith100PercentReliability('SEND_COMPILED_PDF', { pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday() }, syncUrl)}
               onResetRegistry={handleManualResetRegistry}
               onForceReset={handleForceReset}
+              onForceSyncAll={handleForceSyncAll}
               onRefreshData={() => fetchRegistryFromCloud(syncUrl)}
               lastSync={lastSync}
             />

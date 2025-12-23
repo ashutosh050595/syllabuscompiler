@@ -1,27 +1,24 @@
 
 // Service Worker for background sync
-const CACHE_NAME = 'syllabus-v1';
+const CACHE_NAME = 'sh-syllabus-v2';
 const OFFLINE_URL = '/offline.html';
-const SYNC_QUEUE = 'sync-queue';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.add(OFFLINE_URL).catch(() => console.debug('Offline URL cache skip')))
+      .then(cache => cache.add(OFFLINE_URL).catch(() => console.debug('Offline cache skip')))
   );
   self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
-  // Handle API requests
   if (event.request.url.includes('script.google.com')) {
     event.respondWith(
       fetch(event.request)
         .catch(() => {
-          // Return a placeholder response when offline
           return new Response(JSON.stringify({
             result: 'queued',
-            message: 'Will sync when online'
+            message: 'Network offline. Request will be retried by app engine.'
           }), {
             headers: { 'Content-Type': 'application/json' }
           });
