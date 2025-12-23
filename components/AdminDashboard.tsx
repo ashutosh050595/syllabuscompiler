@@ -31,7 +31,7 @@ interface BatchStatus {
 }
 
 const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, setSyncUrl, onSendWarnings, onSendPdf, onResetRegistry, onForceReset, onForceResetAll }) => {
-  const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'requests' | 'settings'>('monitor');
+  const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'requests' | 'settings' | 'archive'>('monitor');
   const [showInfoModal, setShowInfoModal] = useState(false);
   const nextWeek = getNextWeekMonday();
   const [showModal, setShowModal] = useState(false);

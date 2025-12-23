@@ -1,6 +1,6 @@
 
 /**
- * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v5.0)
+ * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v5.1)
  * 
  * INSTRUCTIONS:
  * 1. Paste this code.
@@ -35,9 +35,22 @@ function doPost(e) {
     
     var data;
     try {
-      // Robust parsing: sometimes postData is directly the string, sometimes it's inside contents
-      var jsonString = e.postData ? e.postData.contents : "{}";
-      data = JSON.parse(jsonString);
+      // 1. Try parsing postData.contents (standard JSON payload)
+      if (e.postData && e.postData.contents) {
+        data = JSON.parse(e.postData.contents);
+      } 
+      // 2. Fallback: sometimes no-cors sends data as a key in parameters if using x-www-form-urlencoded
+      else if (e.parameter) {
+        // Just in case the whole JSON is keys
+        var keys = Object.keys(e.parameter);
+        if (keys.length === 1) {
+           try { data = JSON.parse(keys[0]); } catch(e){}
+        }
+      }
+      
+      // 3. Fallback: if data is still undefined, default to empty
+      if (!data) data = {};
+      
     } catch (parseErr) {
       return jsonResponse("error", "Failed to parse JSON: " + parseErr.toString());
     }
@@ -53,7 +66,7 @@ function doPost(e) {
     else if (action === 'REQUEST_RESUBMIT') result = handleResubmitRequest(data);
     else if (action === 'APPROVE_RESUBMIT') result = handleResubmitApproval(data);
     else if (action === 'RESET_SUBMISSION') result = handleResetSubmission(data);
-    else result = jsonResponse("error", "Invalid Action: " + action);
+    else result = jsonResponse("error", "Invalid Action: " + action + " or no data received");
 
     return result;
 

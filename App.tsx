@@ -18,20 +18,20 @@ const App: React.FC = () => {
   const teachersRef = useRef<Teacher[]>([]);
   const syncUrlRef = useRef<string>('');
 
-  // Helper to post data to cloud - STANDARD CORS MODE
+  // Helper to post data to cloud - NO-CORS MODE for reliability
   const cloudPost = async (url: string, payload: any) => {
     if (!url || !url.startsWith('http')) return false;
     console.log("Posting to cloud:", payload.action);
     try {
-      const response = await fetch(url, {
+      // Using no-cors prevents the browser from blocking the response due to CORS issues on the 302 redirect from Google Script
+      // The trade-off is we cannot read the response, but the data is sent.
+      await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // 'text/plain' avoids preflight in simple cases
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload),
-        redirect: 'follow'
       });
-      
-      const text = await response.text();
-      console.log("Cloud response:", text);
+      console.log("Cloud request sent (opaque response)");
       return true;
     } catch (err) {
       console.error("Cloud Error:", err);
@@ -39,7 +39,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Helper to fetch registry
+  // Helper to fetch registry - GET requests work fine with standard CORS
   const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
     if (!url || !url.startsWith('http')) return false;
     try {
