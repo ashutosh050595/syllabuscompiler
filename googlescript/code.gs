@@ -1,12 +1,12 @@
 
 /**
- * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v4.4)
+ * SACRED HEART SCHOOL - SYLLABUS MANAGER CLOUD BACKEND (v5.0)
  * 
- * IMPORTANT:
- * 1. Paste this entire code into your Google Apps Script editor.
- * 2. Save the project.
- * 3. Run the function 'setupTriggers' ONCE manually from the toolbar.
- * 4. Deploy as Web App -> Execute as: Me -> Who can access: Anyone.
+ * INSTRUCTIONS:
+ * 1. Paste this code.
+ * 2. Save.
+ * 3. Run 'setupTriggers' once.
+ * 4. Deploy > Manage Deployments > Edit > New Version > Deploy.
  */
 
 const ROOT_FOLDER_NAME = "Sacred Heart Syllabus Reports";
@@ -15,27 +15,50 @@ const REGISTRY_SHEET = "Registry";
 const REQUESTS_SHEET = "Requests";
 const PORTAL_URL = "https://syllabuscompiler-ruddy.vercel.app/";
 
+function doOptions(e) {
+  var headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400"
+  };
+  return ContentService.createTextOutput("").setMimeType(ContentService.MimeType.TEXT).setHeaders(headers);
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(10000); 
+  // Wait up to 30 seconds for other processes to finish.
+  lock.tryLock(30000);
 
   try {
     ensureEnvironment();
-    var data = JSON.parse(e.postData.contents);
+    
+    var data;
+    try {
+      // Robust parsing: sometimes postData is directly the string, sometimes it's inside contents
+      var jsonString = e.postData ? e.postData.contents : "{}";
+      data = JSON.parse(jsonString);
+    } catch (parseErr) {
+      return jsonResponse("error", "Failed to parse JSON: " + parseErr.toString());
+    }
+
     var action = data.action;
+    var result;
 
-    if (action === 'SUBMIT_PLAN') return handlePlanSubmission(data);
-    if (action === 'SYNC_REGISTRY') return handleSyncRegistry(data);
-    if (action === 'GET_REGISTRY') return handleGetRegistry();
-    if (action === 'SEND_WARNINGS') return handleWarningEmails(data);
-    if (action === 'SEND_COMPILED_PDF') return handlePdfDelivery(data);
-    if (action === 'REQUEST_RESUBMIT') return handleResubmitRequest(data);
-    if (action === 'APPROVE_RESUBMIT') return handleResubmitApproval(data);
-    if (action === 'RESET_SUBMISSION') return handleResetSubmission(data);
+    if (action === 'SUBMIT_PLAN') result = handlePlanSubmission(data);
+    else if (action === 'SYNC_REGISTRY') result = handleSyncRegistry(data);
+    else if (action === 'GET_REGISTRY') result = handleGetRegistry();
+    else if (action === 'SEND_WARNINGS') result = handleWarningEmails(data);
+    else if (action === 'SEND_COMPILED_PDF') result = handlePdfDelivery(data);
+    else if (action === 'REQUEST_RESUBMIT') result = handleResubmitRequest(data);
+    else if (action === 'APPROVE_RESUBMIT') result = handleResubmitApproval(data);
+    else if (action === 'RESET_SUBMISSION') result = handleResetSubmission(data);
+    else result = jsonResponse("error", "Invalid Action: " + action);
 
-    return jsonResponse("error", "Invalid Action");
+    return result;
+
   } catch (error) {
-    return jsonResponse("error", error.toString());
+    return jsonResponse("error", "Server Error: " + error.toString());
   } finally {
     lock.releaseLock();
   }
@@ -46,7 +69,7 @@ function doGet(e) {
 }
 
 // ==========================================
-// AUTOMATION TRIGGERS (Run 'setupTriggers' once manually)
+// AUTOMATION TRIGGERS
 // ==========================================
 
 function setupTriggers() {
@@ -68,7 +91,7 @@ function setupTriggers() {
       .atHour(21)
       .create();
       
-  console.log("Triggers setup complete. Sheets checked/created.");
+  console.log("Triggers setup complete.");
 }
 
 function getNextMondayDate() {
@@ -78,6 +101,241 @@ function getNextMondayDate() {
   if (diff === 0) diff = 7;
   var nextMon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff);
   return Utilities.formatDate(nextMon, Session.getScriptTimeZone(), "yyyy-MM-dd");
+}
+
+// ==========================================
+// HANDLERS
+// ==========================================
+
+function handlePlanSubmission(data) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SUBMISSIONS_SHEET);
+  // Ensure plans exists and is an array
+  if (!data.plans || !Array.isArray(data.plans)) {
+    return jsonResponse("error", "No plans provided in payload");
+  }
+
+  data.plans.forEach(function(p) {
+    sheet.appendRow([
+      new Date(), 
+      data.weekStarting, 
+      data.teacherName, 
+      data.teacherEmail, 
+      p.classLevel, 
+      p.section, 
+      p.subject, 
+      p.chapterName, 
+      p.topics, 
+      p.homework
+    ]);
+  });
+  
+  // Send Confirmation Email
+  try {
+    var startDate = new Date(data.weekStarting);
+    var endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 5); 
+    var dateToStr = endDate.toISOString().split('T')[0];
+
+    var subject = "[OFFICIAL] Confirmation: Weekly Syllabus Submission Received";
+    var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+      "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+      "<p>Dear " + data.teacherName + ",</p>" +
+      "<p>This message is to confirm that your lesson plan for the week of <b>" + data.weekStarting + "</b> to <b>" + dateToStr + "</b> has been successfully recorded in the central database.</p>" +
+      "<p><b>Subjects Recorded:</b></p><ul>";
+
+    var uniqueSubjects = [];
+    var seen = {};
+    data.plans.forEach(function(p) {
+      var key = "Class " + p.classLevel + "-" + p.section + " (" + p.subject + ")";
+      if (!seen[key]) {
+        uniqueSubjects.push("<li>" + key + "</li>");
+        seen[key] = true;
+      }
+    });
+    
+    htmlBody += uniqueSubjects.join("") + "</ul>" +
+      "<p>Thank you for your timely contribution to the academic planning process.</p>" +
+      "<br><p>Best Regards,</p>" +
+      "<p><b>Academic Coordinator</b><br>Sacred Heart School</p>" +
+      "</div>";
+
+    GmailApp.sendEmail(data.teacherEmail, subject, "", {
+      name: "Sacred Heart School",
+      htmlBody: htmlBody
+    });
+  } catch (e) { console.error("Email failed: " + e.toString()); }
+
+  return jsonResponse("success", "Plans stored successfully");
+}
+
+function handleResubmitRequest(data) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(REQUESTS_SHEET);
+  // Expected columns: ID, Teacher ID, Name, Email, Week Starting, Timestamp, Status
+  sheet.appendRow([
+    data.id, 
+    data.teacherId, 
+    data.teacherName, 
+    data.teacherEmail, 
+    data.weekStarting, 
+    data.timestamp, 
+    data.status
+  ]);
+  return jsonResponse("success", "Request Logged");
+}
+
+function handleResubmitApproval(data) {
+  var reqSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(REQUESTS_SHEET);
+  if (reqSheet) {
+    var reqRows = reqSheet.getDataRange().getValues();
+    for (var i = 1; i < reqRows.length; i++) {
+      var rowId = reqRows[i][0];
+      if (rowId === data.requestId) {
+        reqSheet.getRange(i + 1, 7).setValue('approved');
+        break;
+      }
+    }
+  }
+  
+  handleResetSubmission(data, true); 
+  
+  // Formal Approval Email
+  try {
+    var subject = "[APPROVED] Permission to Resubmit Weekly Syllabus";
+    var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+      "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+      "<p>Dear " + data.teacherName + ",</p>" +
+      "<p>We wish to inform you that your request to modify the syllabus submission for the week commencing <b>" + data.weekStarting + "</b> has been <b>GRANTED</b> by the administration.</p>" +
+      "<p>Your previous submission has been cleared from the registry. You may now access the portal to submit the updated lesson plan.</p>" +
+      "<p style='text-align: center;'><a href='" + PORTAL_URL + "' style='background: #003399; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Access Portal</a></p>" +
+      "<br><p>Best Regards,</p>" +
+      "<p><b>Academic Administration</b><br>Sacred Heart School</p>" +
+      "</div>";
+
+    GmailApp.sendEmail(data.teacherEmail, subject, "", { name: "Sacred Heart School", htmlBody: htmlBody });
+  } catch (e) { console.error(e); }
+
+  return jsonResponse("success", "Approval Sent");
+}
+
+function handleResetSubmission(data, skipEmail) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SUBMISSIONS_SHEET);
+  var rows = sheet.getDataRange().getValues();
+  var rowsDeleted = 0;
+  // Iterate backwards to delete safely
+  for (var i = rows.length - 1; i >= 1; i--) {
+    var rowWeek = rows[i][1];
+    var rowEmail = rows[i][3];
+    if (rowWeek instanceof Date) rowWeek = Utilities.formatDate(rowWeek, Session.getScriptTimeZone(), "yyyy-MM-dd");
+    
+    // Check if week and email match
+    if (String(rowWeek) === String(data.weekStarting) && 
+        String(rowEmail).toLowerCase().trim() === String(data.teacherEmail).toLowerCase().trim()) {
+      sheet.deleteRow(i + 1);
+      rowsDeleted++;
+    }
+  }
+  
+  if (!skipEmail) {
+     try {
+       var subject = "[ALERT] Administrative Reset of Syllabus Submission";
+       var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+          "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+          "<p>Dear " + data.teacherName + ",</p>" +
+          "<p>We wish to inform you that your syllabus submission for the week of <b>" + data.weekStarting + "</b> has been reset by the administrative office.</p>" +
+          "<p>Please log in to the faculty portal and submit your lesson plan again.</p>" +
+          "<p style='text-align: center;'><a href='" + PORTAL_URL + "' style='background: #d32f2f; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Resubmit Plan</a></p>" +
+          "<br><p>Best Regards,</p>" +
+          "<p><b>Academic Administration</b><br>Sacred Heart School</p>" +
+          "</div>";
+          
+       GmailApp.sendEmail(data.teacherEmail, subject, "", { name: "Sacred Heart School", htmlBody: htmlBody });
+     } catch(e) { console.error(e); }
+  }
+  return jsonResponse("success", "Deleted " + rowsDeleted + " rows");
+}
+
+function handleSyncRegistry(data) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(REGISTRY_SHEET);
+  sheet.clearContents();
+  sheet.appendRow(["Teacher ID", "Name", "Email", "WhatsApp", "Assignments JSON", "Class Teacher Info JSON"]);
+  if(data.teachers && Array.isArray(data.teachers)) {
+    data.teachers.forEach(function(t) {
+      sheet.appendRow([t.id, t.name, t.email, t.whatsapp || "", JSON.stringify(t.assignedClasses), t.isClassTeacher ? JSON.stringify(t.isClassTeacher) : ""]);
+    });
+  }
+  return jsonResponse("success", "Registry Synced");
+}
+
+function handleGetRegistry() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var regSheet = ss.getSheetByName(REGISTRY_SHEET);
+  var reqSheet = ss.getSheetByName(REQUESTS_SHEET);
+  if (!regSheet) return jsonResponse("error", "Registry not found");
+  
+  var data = regSheet.getDataRange().getValues();
+  var teachers = [];
+  for (var i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    try {
+      teachers.push({
+        id: data[i][0], 
+        name: data[i][1], 
+        email: data[i][2], 
+        whatsapp: data[i][3],
+        assignedClasses: data[i][4] ? JSON.parse(data[i][4]) : [], 
+        isClassTeacher: data[i][5] ? JSON.parse(data[i][5]) : undefined
+      });
+    } catch(e) { console.error("Error parsing row " + i); }
+  }
+  
+  var requests = [];
+  if (reqSheet) {
+    var reqData = reqSheet.getDataRange().getValues();
+    for (var i = 1; i < reqData.length; i++) {
+      if (!reqData[i][0]) continue;
+      var week = reqData[i][4];
+      if (week instanceof Date) week = Utilities.formatDate(week, Session.getScriptTimeZone(), "yyyy-MM-dd");
+      requests.push({
+        id: reqData[i][0], teacherId: reqData[i][1], teacherName: reqData[i][2], teacherEmail: reqData[i][3],
+        weekStarting: week, timestamp: reqData[i][5], status: reqData[i][6]
+      });
+    }
+  }
+  return jsonResponse("success", { teachers: teachers, requests: requests });
+}
+
+function handleWarningEmails(data) {
+  var count = 0;
+  if (data.defaulters && Array.isArray(data.defaulters)) {
+    data.defaulters.forEach(function(d) {
+      try {
+        sendWarningEmail(d.name, d.email, data.weekStarting);
+        count++;
+      } catch(e) {}
+    });
+  }
+  return jsonResponse("success", "Sent " + count + " emails");
+}
+
+function handlePdfDelivery(data) {
+  try {
+    var blob = Utilities.newBlob(Utilities.base64Decode(data.pdfBase64.split(',')[1]), MimeType.PDF, data.filename);
+    
+    var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
+        "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
+        "<p>Dear Faculty,</p>" +
+        "<p>Please find attached the compiled syllabus report for <b>Class " + data.className + "</b> for the week starting <b>" + data.weekStarting + "</b>.</p>" +
+        "<br><p><b>Academic Administration</b></p></div>";
+
+    GmailApp.sendEmail(data.recipient, "[OFFICIAL] Syllabus Report: " + data.className, "", {
+      htmlBody: htmlBody,
+      attachments: [blob],
+      name: "Sacred Heart School"
+    });
+    return jsonResponse("success", "PDF Sent");
+  } catch (e) {
+    return jsonResponse("error", e.toString());
+  }
 }
 
 function autoCheckAndSendWarnings() {
@@ -108,19 +366,6 @@ function autoCheckAndSendWarnings() {
       sendWarningEmail(name, regData[i][2], nextWeekMonday);
     }
   }
-}
-
-function sendWarningEmail(name, email, weekStarting) {
-    var subject = "[URGENT] Automated Reminder: Syllabus Submission Due";
-    var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
-      "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
-      "<p>Dear " + name + ",</p>" +
-      "<p>This is an automated system reminder.</p>" +
-      "<p>The syllabus plan for the upcoming week commencing <b>" + weekStarting + "</b> is pending submission.</p>" +
-      "<p style='text-align: center;'><a href='" + PORTAL_URL + "' style='background: #d32f2f; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Submit Now</a></p>" +
-      "</div>";
-
-    GmailApp.sendEmail(email, subject, "", { name: "Sacred Heart School", htmlBody: htmlBody });
 }
 
 function autoSendCompilations() {
@@ -210,37 +455,6 @@ function sendFormalCompilationEmail(name, email, cls, sec, weekRange, driveLink,
   GmailApp.sendEmail(email, subject, "", { name: "Sacred Heart School", htmlBody: htmlBody, attachments: [pdfBlob] });
 }
 
-function handleGetRegistry() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var regSheet = ss.getSheetByName(REGISTRY_SHEET);
-  var reqSheet = ss.getSheetByName(REQUESTS_SHEET);
-  if (!regSheet) return jsonResponse("error", "Registry not found");
-  
-  var data = regSheet.getDataRange().getValues();
-  var teachers = [];
-  for (var i = 1; i < data.length; i++) {
-    if (!data[i][0]) continue;
-    teachers.push({
-      id: data[i][0], name: data[i][1], email: data[i][2], whatsapp: data[i][3],
-      assignedClasses: JSON.parse(data[i][4] || "[]"), isClassTeacher: data[i][5] ? JSON.parse(data[i][5]) : undefined
-    });
-  }
-  var requests = [];
-  if (reqSheet) {
-    var reqData = reqSheet.getDataRange().getValues();
-    for (var i = 1; i < reqData.length; i++) {
-      if (!reqData[i][0]) continue;
-      var week = reqData[i][4];
-      if (week instanceof Date) week = Utilities.formatDate(week, Session.getScriptTimeZone(), "yyyy-MM-dd");
-      requests.push({
-        id: reqData[i][0], teacherId: reqData[i][1], teacherName: reqData[i][2], teacherEmail: reqData[i][3],
-        weekStarting: week, timestamp: reqData[i][5], status: reqData[i][6]
-      });
-    }
-  }
-  return jsonResponse("success", { teachers: teachers, requests: requests });
-}
-
 function ensureEnvironment() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss.getSheetByName(SUBMISSIONS_SHEET)) {
@@ -257,143 +471,15 @@ function ensureEnvironment() {
   }
 }
 
-function handleSyncRegistry(data) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(REGISTRY_SHEET);
-  sheet.clearContents();
-  sheet.appendRow(["Teacher ID", "Name", "Email", "WhatsApp", "Assignments JSON", "Class Teacher Info JSON"]);
-  data.teachers.forEach(function(t) {
-    sheet.appendRow([t.id, t.name, t.email, t.whatsapp || "", JSON.stringify(t.assignedClasses), t.isClassTeacher ? JSON.stringify(t.isClassTeacher) : ""]);
-  });
-  return jsonResponse("success", "Registry Synced");
-}
-
-function handlePlanSubmission(data) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SUBMISSIONS_SHEET);
-  data.plans.forEach(function(p) {
-    sheet.appendRow([new Date(), data.weekStarting, data.teacherName, data.teacherEmail, p.classLevel, p.section, p.subject, p.chapterName, p.topics, p.homework]);
-  });
-  
-  // Formal Confirmation Email
-  try {
-    var startDate = new Date(data.weekStarting);
-    var endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + 5); 
-    var dateToStr = endDate.toISOString().split('T')[0];
-
-    var subject = "[OFFICIAL] Confirmation: Weekly Syllabus Submission Received";
-    var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
-      "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
-      "<p>Dear " + data.teacherName + ",</p>" +
-      "<p>This message is to confirm that your lesson plan for the week of <b>" + data.weekStarting + "</b> to <b>" + dateToStr + "</b> has been successfully recorded in the central database.</p>" +
-      "<p><b>Subjects Recorded:</b></p><ul>";
-
-    var uniqueSubjects = [];
-    var seen = {};
-    data.plans.forEach(function(p) {
-      var key = "Class " + p.classLevel + "-" + p.section + " (" + p.subject + ")";
-      if (!seen[key]) {
-        uniqueSubjects.push("<li>" + key + "</li>");
-        seen[key] = true;
-      }
-    });
-    
-    htmlBody += uniqueSubjects.join("") + "</ul>" +
-      "<p>Thank you for your timely contribution to the academic planning process.</p>" +
-      "<br><p>Best Regards,</p>" +
-      "<p><b>Academic Coordinator</b><br>Sacred Heart School</p>" +
-      "</div>";
-
-    GmailApp.sendEmail(data.teacherEmail, subject, "", {
-      name: "Sacred Heart School",
-      htmlBody: htmlBody
-    });
-  } catch (e) { console.error(e); }
-
-  return jsonResponse("success");
-}
-
-function handleResubmitRequest(data) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(REQUESTS_SHEET);
-  sheet.appendRow([data.id, data.teacherId, data.teacherName, data.teacherEmail, data.weekStarting, data.timestamp, data.status]);
-  return jsonResponse("success", "Request Logged in Cloud");
-}
-
-function handleResubmitApproval(data) {
-  var reqSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(REQUESTS_SHEET);
-  if (reqSheet) {
-    var reqRows = reqSheet.getDataRange().getValues();
-    for (var i = 1; i < reqRows.length; i++) {
-      var rowId = reqRows[i][0];
-      var rowEmail = reqRows[i][3];
-      var rowWeek = reqRows[i][4];
-      if (rowWeek instanceof Date) rowWeek = Utilities.formatDate(rowWeek, Session.getScriptTimeZone(), "yyyy-MM-dd");
-      
-      var match = false;
-      if (data.requestId && rowId === data.requestId) match = true;
-      else if (rowEmail === data.teacherEmail && rowWeek === data.weekStarting && reqRows[i][6] === 'pending') match = true;
-
-      if (match) {
-        reqSheet.getRange(i + 1, 7).setValue('approved');
-        break;
-      }
-    }
-  }
-  
-  // Reuse deletion logic
-  handleResetSubmission(data, true); 
-  
-  // Formal Approval Email
-  var subject = "[APPROVED] Permission to Resubmit Weekly Syllabus";
-  var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
-    "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
-    "<p>Dear " + data.teacherName + ",</p>" +
-    "<p>We wish to inform you that your request to modify the syllabus submission for the week commencing <b>" + data.weekStarting + "</b> has been <b>GRANTED</b> by the administration.</p>" +
-    "<p>Your previous submission has been cleared from the registry. You may now access the portal to submit the updated lesson plan.</p>" +
-    "<p style='text-align: center;'><a href='" + PORTAL_URL + "' style='background: #003399; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Access Portal</a></p>" +
-    "<br><p>Best Regards,</p>" +
-    "<p><b>Academic Administration</b><br>Sacred Heart School</p>" +
-    "</div>";
-
-  GmailApp.sendEmail(data.teacherEmail, subject, "", { name: "Sacred Heart School", htmlBody: htmlBody });
-
-  return jsonResponse("success", "Approval Sent");
-}
-
-function handleResetSubmission(data, skipEmail) {
-  // data needs: weekStarting, teacherEmail
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SUBMISSIONS_SHEET);
-  var rows = sheet.getDataRange().getValues();
-  for (var i = rows.length - 1; i >= 1; i--) {
-    var rowWeek = rows[i][1];
-    if (rowWeek instanceof Date) rowWeek = Utilities.formatDate(rowWeek, Session.getScriptTimeZone(), "yyyy-MM-dd");
-    if (rowWeek === data.weekStarting && rows[i][3].toLowerCase() === data.teacherEmail.toLowerCase()) {
-      sheet.deleteRow(i + 1);
-    }
-  }
-  
-  // Formal Forced Reset Email (Only if not called from Approval flow)
-  if (!skipEmail) {
-     try {
-       var subject = "[ALERT] Administrative Reset of Syllabus Submission";
-       var htmlBody = "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;'>" +
-          "<h2 style='color: #003399;'>Sacred Heart School</h2>" +
-          "<p>Dear " + data.teacherName + ",</p>" +
-          "<p>We wish to inform you that your syllabus submission for the week of <b>" + data.weekStarting + "</b> has been reset by the administrative office due to necessary updates or correction requirements.</p>" +
-          "<p>Please log in to the faculty portal and submit your lesson plan again at your earliest convenience.</p>" +
-          "<p style='text-align: center;'><a href='" + PORTAL_URL + "' style='background: #d32f2f; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Resubmit Plan</a></p>" +
-          "<br><p>Best Regards,</p>" +
-          "<p><b>Academic Administration</b><br>Sacred Heart School</p>" +
-          "</div>";
-          
-       GmailApp.sendEmail(data.teacherEmail, subject, "", { name: "Sacred Heart School", htmlBody: htmlBody });
-     } catch(e) { console.error(e); }
-  }
-  return jsonResponse("success");
-}
-
 function jsonResponse(res, dataOrMsg) {
   var output = { result: res };
   if (typeof dataOrMsg === 'string') output.message = dataOrMsg;
   else Object.assign(output, dataOrMsg);
-  return ContentService.createTextOutput(JSON.stringify(output)).setMimeType(ContentService.MimeType.JSON);
+  
+  // Important for CORS
+  return ContentService.createTextOutput(JSON.stringify(output))
+    .setMimeType(ContentService.MimeType.JSON)
+    .setHeaders({ 
+      "Access-Control-Allow-Origin": "*" 
+    });
 }

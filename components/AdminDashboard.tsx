@@ -30,8 +30,8 @@ interface BatchStatus {
   log: string[];
 }
 
-const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, onSendWarnings, onSendPdf, onResetRegistry, onForceReset, onForceResetAll }) => {
-  const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'requests' | 'archive'>('monitor');
+const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, setSyncUrl, onSendWarnings, onSendPdf, onResetRegistry, onForceReset, onForceResetAll }) => {
+  const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'requests' | 'settings'>('monitor');
   const [showInfoModal, setShowInfoModal] = useState(false);
   const nextWeek = getNextWeekMonday();
   const [showModal, setShowModal] = useState(false);
@@ -290,7 +290,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
 
       <div className="bg-white rounded-[3rem] shadow-2xl border border-gray-100 overflow-hidden">
         <div className="flex border-b border-gray-50 bg-gray-50/50">
-           {['monitor', 'registry', 'requests', 'archive'].map(t => (
+           {['monitor', 'registry', 'requests', 'settings', 'archive'].map(t => (
              <button key={t} onClick={() => setActiveTab(t as any)} className={`flex-1 py-6 text-[11px] font-black transition-all uppercase tracking-[0.25em] relative ${activeTab === t ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>
                {t} {activeTab === t && <span className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600"></span>}
              </button>
@@ -428,39 +428,24 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
             </div>
           )}
 
-          {activeTab === 'requests' && (
+          {activeTab === 'settings' && (
             <div className="space-y-10">
-               <h3 className="text-2xl font-black text-gray-800 tracking-tight">Resubmission Requests</h3>
-               {resubmitRequests.filter(r => r.status === 'pending').length > 0 ? (
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                   {resubmitRequests.filter(r => r.status === 'pending').map(req => (
-                     <div key={req.id} className="bg-white border-2 border-amber-50 p-8 rounded-[3rem] hover:border-amber-100 transition-all">
-                        <div className="flex justify-between items-start mb-4">
-                           <div>
-                              <h4 className="font-black text-gray-900 text-lg">{req.teacherName}</h4>
-                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Requested on: {new Date(req.timestamp).toLocaleString()}</p>
-                           </div>
-                           <div className="w-10 h-10 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center"><i className="fas fa-undo"></i></div>
-                        </div>
-                        <div className="bg-gray-50 p-4 rounded-2xl mb-6">
-                           <p className="text-xs font-bold text-gray-600">Week Beginning</p>
-                           <p className="text-sm font-black text-gray-900">{req.weekStarting}</p>
-                        </div>
-                        <button 
-                          onClick={() => onApproveResubmit(req.id)}
-                          className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-emerald-100"
-                        >
-                          Approve Resubmission
-                        </button>
-                     </div>
-                   ))}
-                 </div>
-               ) : (
-                 <div className="text-center py-20 bg-gray-50 rounded-[3rem] border border-dashed border-gray-200">
-                    <i className="fas fa-check-double text-gray-200 text-6xl mb-4"></i>
-                    <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">No pending requests</p>
-                 </div>
-               )}
+               <h3 className="text-2xl font-black text-gray-800 tracking-tight">System Connections</h3>
+               <div className="bg-gray-50 p-8 rounded-[3rem] border border-gray-100">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 ml-1">Google Script Cloud Endpoint (Web App URL)</label>
+                  <div className="flex gap-4">
+                    <input 
+                      type="text" 
+                      className="flex-1 px-8 py-4 rounded-2xl bg-white border border-gray-200 font-bold text-sm text-gray-600" 
+                      value={syncUrl} 
+                      onChange={(e) => setSyncUrl(e.target.value)}
+                    />
+                    <button className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest">Update</button>
+                  </div>
+                  <p className="mt-4 text-[10px] text-gray-400 font-bold leading-relaxed max-w-2xl">
+                    Important: If you redeploy the backend script, paste the new "Web App URL" here. Ensure the deployment is set to "Anyone" and "Execute as Me".
+                  </p>
+               </div>
             </div>
           )}
 

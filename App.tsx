@@ -18,21 +18,24 @@ const App: React.FC = () => {
   const teachersRef = useRef<Teacher[]>([]);
   const syncUrlRef = useRef<string>('');
 
-  // Helper to post data to cloud
+  // Helper to post data to cloud - STANDARD CORS MODE
   const cloudPost = async (url: string, payload: any) => {
     if (!url || !url.startsWith('http')) return false;
+    console.log("Posting to cloud:", payload.action);
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // 'text/plain' avoids preflight in simple cases
         body: JSON.stringify(payload),
-        mode: 'cors',
         redirect: 'follow'
       });
-      return response.ok || response.status === 0 || response.type === 'opaque';
+      
+      const text = await response.text();
+      console.log("Cloud response:", text);
+      return true;
     } catch (err) {
-      console.debug("Note: Cloud request dispatched despite browser warning.");
-      return true; 
+      console.error("Cloud Error:", err);
+      return false; 
     }
   };
 
@@ -40,34 +43,29 @@ const App: React.FC = () => {
   const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
     if (!url || !url.startsWith('http')) return false;
     try {
-      const response = await fetch(url); 
+      const response = await fetch(url, { redirect: 'follow' }); 
       const data = await response.json();
       
       if (data.result === 'success') {
-        // Case 1: Teachers Data
         if (data.teachers && Array.isArray(data.teachers) && data.teachers.length > 0) {
           setTeachers(data.teachers);
           teachersRef.current = data.teachers;
           localStorage.setItem('sh_teachers_v4', JSON.stringify(data.teachers));
         } 
-        // Case 2: Cloud is empty (New Deployment). Automatically seed it.
         else {
-          console.log("Cloud registry is empty. Auto-seeding with initial data...");
+          console.log("Cloud registry is empty. Auto-seeding...");
           await cloudPost(url, { 
             action: 'SYNC_REGISTRY', 
             teachers: INITIAL_TEACHERS 
           });
-          // Set local state to initial defaults
           setTeachers(INITIAL_TEACHERS);
           teachersRef.current = INITIAL_TEACHERS;
         }
 
-        // Case 3: Requests Data
         if (data.requests && Array.isArray(data.requests)) {
           setResubmitRequests(data.requests);
           localStorage.setItem('sh_resubmit_requests', JSON.stringify(data.requests));
         }
-
         return true;
       }
       return false;
@@ -83,13 +81,13 @@ const App: React.FC = () => {
         const savedTeachers = localStorage.getItem('sh_teachers_v4');
         const savedSubmissions = localStorage.getItem('sh_submissions_v2');
         const savedRequests = localStorage.getItem('sh_resubmit_requests');
-        const savedSyncUrl = localStorage.getItem('sh_sync_url');
         const savedUser = sessionStorage.getItem('sh_user');
         
         const params = new URLSearchParams(window.location.search);
         const urlParam = params.get('sync');
         
-        let activeSyncUrl = urlParam || savedSyncUrl || DEFAULT_SYNC_URL;
+        // PRIORITIZE DEFAULT_SYNC_URL
+        let activeSyncUrl = urlParam || DEFAULT_SYNC_URL;
         
         if (urlParam) {
           window.history.replaceState({}, document.title, window.location.pathname);
