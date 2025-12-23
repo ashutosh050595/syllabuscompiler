@@ -141,23 +141,68 @@ const App: React.FC = () => {
   const handleApproveResubmit = async (requestId: string) => {
     const request = resubmitRequests.find(r => r.id === requestId);
     if (!request) return;
-    if (syncUrlRef.current) {
-      await cloudPost(syncUrlRef.current, { 
-        action: 'APPROVE_RESUBMIT', 
-        requestId: request.id,
-        teacherEmail: request.teacherEmail,
-        teacherName: request.teacherName,
-        weekStarting: request.weekStarting 
-      });
-      setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current), 1500);
+    
+    try {
+      // 1. Remove the request from local state immediately
+      const updatedRequests = resubmitRequests.filter(r => r.id !== requestId);
+      setResubmitRequests(updatedRequests);
+      localStorage.setItem('sh_resubmit_requests', JSON.stringify(updatedRequests));
+      
+      // 2. Remove the teacher's submission from the current week
+      const updatedSubmissions = submissions.filter(s => 
+        !(s.teacherEmail === request.teacherEmail && s.weekStarting === request.weekStarting)
+      );
+      setSubmissions(updatedSubmissions);
+      localStorage.setItem('sh_submissions_v2', JSON.stringify(updatedSubmissions));
+      
+      // 3. Send approval to backend
+      if (syncUrlRef.current) {
+        await cloudPost(syncUrlRef.current, { 
+          action: 'APPROVE_RESUBMIT', 
+          requestId: request.id,
+          teacherEmail: request.teacherEmail,
+          teacherName: request.teacherName,
+          weekStarting: request.weekStarting 
+        });
+        
+        // 4. Force refresh data from cloud
+        setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current), 1000);
+      }
+    } catch (error) {
+      console.error("Failed to approve resubmit:", error);
+      // Revert if failed
+      fetchRegistryFromCloud(syncUrlRef.current);
     }
   };
 
   const handleForceReset = async (teacherId: string, week: string) => {
     const sub = submissions.find(s => s.teacherId === teacherId && s.weekStarting === week);
-    if (sub && syncUrlRef.current) {
-      await cloudPost(syncUrlRef.current, { action: 'RESET_SUBMISSION', teacherEmail: sub.teacherEmail, teacherName: sub.teacherName, weekStarting: week });
-      setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current), 1500);
+    if (!sub) return;
+    
+    try {
+      // 1. Remove from local state immediately
+      const updatedSubmissions = submissions.filter(s => 
+        !(s.teacherId === teacherId && s.weekStarting === week)
+      );
+      setSubmissions(updatedSubmissions);
+      localStorage.setItem('sh_submissions_v2', JSON.stringify(updatedSubmissions));
+      
+      // 2. Send reset to backend
+      if (syncUrlRef.current) {
+        await cloudPost(syncUrlRef.current, { 
+          action: 'RESET_SUBMISSION', 
+          teacherEmail: sub.teacherEmail, 
+          teacherName: sub.teacherName, 
+          weekStarting: week 
+        });
+        
+        // 3. Force refresh data from cloud
+        setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current), 1000);
+      }
+    } catch (error) {
+      console.error("Failed to force reset:", error);
+      // Revert if failed
+      fetchRegistryFromCloud(syncUrlRef.current);
     }
   };
 
