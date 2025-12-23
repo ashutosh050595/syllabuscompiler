@@ -23,8 +23,6 @@ const App: React.FC = () => {
     if (!url || !url.startsWith('http')) return false;
     console.log("Posting to cloud:", payload.action);
     try {
-      // Using no-cors prevents the browser from blocking the response due to CORS issues on the 302 redirect from Google Script
-      // The trade-off is we cannot read the response, but the data is sent.
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
@@ -39,14 +37,18 @@ const App: React.FC = () => {
     }
   };
 
-  // Helper to fetch registry - GET requests work fine with standard CORS
+  // Helper to fetch registry - GET requests
   const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
     if (!url || !url.startsWith('http')) return false;
     try {
-      const response = await fetch(url, { redirect: 'follow' }); 
+      // CACHE BUSTING: Append timestamp to force fresh fetch from Google Sheets
+      const fetchUrl = url.includes('?') ? `${url}&t=${Date.now()}` : `${url}?t=${Date.now()}`;
+      
+      const response = await fetch(fetchUrl, { redirect: 'follow' }); 
       const data = await response.json();
       
       if (data.result === 'success') {
+        // 1. Update Teachers
         if (data.teachers && Array.isArray(data.teachers) && data.teachers.length > 0) {
           setTeachers(data.teachers);
           teachersRef.current = data.teachers;
@@ -62,10 +64,19 @@ const App: React.FC = () => {
           teachersRef.current = INITIAL_TEACHERS;
         }
 
+        // 2. Update Requests
         if (data.requests && Array.isArray(data.requests)) {
           setResubmitRequests(data.requests);
           localStorage.setItem('sh_resubmit_requests', JSON.stringify(data.requests));
         }
+
+        // 3. Update Submissions (This fixes the sync issue across devices)
+        if (data.submissions && Array.isArray(data.submissions)) {
+          console.log("Synced submissions from cloud:", data.submissions.length);
+          setSubmissions(data.submissions);
+          localStorage.setItem('sh_submissions_v2', JSON.stringify(data.submissions));
+        }
+
         return true;
       }
       return false;
@@ -86,7 +97,6 @@ const App: React.FC = () => {
         const params = new URLSearchParams(window.location.search);
         const urlParam = params.get('sync');
         
-        // PRIORITIZE DEFAULT_SYNC_URL
         let activeSyncUrl = urlParam || DEFAULT_SYNC_URL;
         
         if (urlParam) {
@@ -180,12 +190,10 @@ const App: React.FC = () => {
     const sub = submissions.find(s => s.teacherId === teacherId && s.weekStarting === week);
     if (!sub) return;
 
-    // 1. Remove locally
     const filtered = submissions.filter(s => s !== sub);
     setSubmissions(filtered);
     localStorage.setItem('sh_submissions_v2', JSON.stringify(filtered));
 
-    // 2. Cloud Update
     if (syncUrlRef.current) {
       await cloudPost(syncUrlRef.current, {
         action: 'RESET_SUBMISSION',
@@ -197,12 +205,10 @@ const App: React.FC = () => {
   };
 
   const handleForceResetAll = async (week: string) => {
-    // 1. Remove all locally for this week
     const filtered = submissions.filter(s => s.weekStarting !== week);
     setSubmissions(filtered);
     localStorage.setItem('sh_submissions_v2', JSON.stringify(filtered));
 
-    // 2. Cloud Update - We loop because backend is simple
     if (syncUrlRef.current) {
       const targets = submissions.filter(s => s.weekStarting === week);
       for (const t of targets) {
@@ -341,6 +347,7 @@ const App: React.FC = () => {
               onResetRegistry={handleManualResetRegistry}
               onForceReset={handleForceReset}
               onForceResetAll={handleForceResetAll}
+              onRefreshData={() => fetchRegistryFromCloud(syncUrl)}
             />
           ) : (
             <TeacherDashboard 

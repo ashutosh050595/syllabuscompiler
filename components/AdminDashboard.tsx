@@ -18,6 +18,7 @@ interface Props {
   onResetRegistry?: () => Promise<void>;
   onForceReset?: (teacherId: string, week: string) => Promise<void>;
   onForceResetAll?: (week: string) => Promise<void>;
+  onRefreshData?: () => Promise<boolean>;
 }
 
 interface BatchStatus {
@@ -30,7 +31,7 @@ interface BatchStatus {
   log: string[];
 }
 
-const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, setSyncUrl, onSendWarnings, onSendPdf, onResetRegistry, onForceReset, onForceResetAll }) => {
+const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, setSubmissions, resubmitRequests, onApproveResubmit, syncUrl, setSyncUrl, onSendWarnings, onSendPdf, onResetRegistry, onForceReset, onForceResetAll, onRefreshData }) => {
   const [activeTab, setActiveTab] = useState<'monitor' | 'registry' | 'requests' | 'settings' | 'archive'>('monitor');
   const [showInfoModal, setShowInfoModal] = useState(false);
   const nextWeek = getNextWeekMonday();
@@ -38,6 +39,7 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
   const [editing, setEditing] = useState<Partial<Teacher> | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [outlineCopyFeedback, setOutlineCopyFeedback] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   const [batchStatus, setBatchStatus] = useState<BatchStatus>({
     isActive: false,
@@ -194,6 +196,13 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
     setBatchStatus(prev => ({ ...prev, isFinished: true, currentName: 'Batch Mail Complete!' }));
   };
 
+  const handleManualRefresh = async () => {
+    if (!onRefreshData) return;
+    setIsRefreshing(true);
+    await onRefreshData();
+    setIsRefreshing(false);
+  };
+
   const handleSaveTeacher = () => {
     if (!editing || !editing.name || !editing.email) return;
     
@@ -280,6 +289,16 @@ const AdminDashboard: React.FC<Props> = ({ teachers, setTeachers, submissions, s
           <div className="flex items-center gap-3 mt-2">
              <span className={`w-3 h-3 rounded-full ${syncUrl ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`}></span>
              <p className="text-gray-400 font-bold uppercase tracking-[0.2em] text-[10px]">{syncUrl ? 'Cloud Automations Active' : 'Local Mode'}</p>
+             {onRefreshData && (
+               <button 
+                 onClick={handleManualRefresh}
+                 disabled={isRefreshing}
+                 className="ml-2 text-[10px] font-black uppercase tracking-widest bg-gray-100 px-3 py-1 rounded-full text-gray-500 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-2"
+               >
+                 {isRefreshing ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-sync-alt"></i>}
+                 {isRefreshing ? 'Syncing...' : 'Force Refresh'}
+               </button>
+             )}
           </div>
         </div>
         <div className="flex flex-wrap gap-4 justify-center">
