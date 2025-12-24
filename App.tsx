@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Teacher, WeeklySubmission, ClassLevel, Section, Submission, ResubmitRequest } from './types';
 import Login from './components/Login';
 import TeacherDashboard from './components/TeacherDashboard';
@@ -15,27 +15,19 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [showNotification, setShowNotification] = useState(true);
-  const [dataVersion, setDataVersion] = useState(0);
   
   const teachersRef = useRef<Teacher[]>([]);
   const syncUrlRef = useRef<string>('');
 
-  // Enhanced cloud POST using URLSearchParams for best cross-device compatibility
+  // Enhanced cloud POST using URLSearchParams for best cross-device compatibility in no-cors mode
   const cloudPost = async (url: string, payload: any) => {
     if (!url || !url.startsWith('http')) return false;
     try {
-      // Create proper form data
-      const formData = new URLSearchParams();
-      formData.append('payload', JSON.stringify(payload));
-      
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Cache-Control': 'no-cache'
-        },
-        body: formData,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ [JSON.stringify(payload)]: '' }),
       });
       return true;
     } catch (err) {
@@ -44,22 +36,11 @@ const App: React.FC = () => {
     }
   };
 
-  const fetchRegistryFromCloud = async (url: string, force = false): Promise<boolean> => {
+  const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
     if (!url || !url.startsWith('http')) return false;
     try {
-      // Add cache-busting parameter
-      const timestamp = force ? `&force=${Date.now()}` : `&t=${Date.now()}`;
-      const fetchUrl = url.includes('?') ? `${url}${timestamp}` : `${url}?${timestamp}`;
-      
-      const response = await fetch(fetchUrl, { 
-        redirect: 'follow',
-        cache: 'no-store'
-      }); 
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
+      const fetchUrl = url.includes('?') ? `${url}&t=${Date.now()}` : `${url}?t=${Date.now()}`;
+      const response = await fetch(fetchUrl, { redirect: 'follow' }); 
       const data = await response.json();
       
       if (data.result === 'success') {
@@ -80,7 +61,6 @@ const App: React.FC = () => {
         }
         
         setLastSync(new Date());
-        setDataVersion(prev => prev + 1);
         return true;
       }
       return false;
@@ -90,35 +70,16 @@ const App: React.FC = () => {
     }
   };
 
-  // POLLING EFFECT: For ALL logged in users, sync every 30 seconds
+  // POLLING EFFECT: If Admin is logged in, sync every 60 seconds
   useEffect(() => {
     let interval: any;
-    if (user && syncUrl) {
-      // Initial immediate refresh
-      fetchRegistryFromCloud(syncUrl, true);
-      
-      // Set up regular polling
+    if (user && 'isAdmin' in user && syncUrl) {
       interval = setInterval(() => {
-        fetchRegistryFromCloud(syncUrl, true);
-      }, 30000); // 30 seconds
+        fetchRegistryFromCloud(syncUrl);
+      }, 60000);
     }
     return () => clearInterval(interval);
   }, [user, syncUrl]);
-
-  // Auto-refresh when tab becomes visible
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && user && syncUrlRef.current) {
-        fetchRegistryFromCloud(syncUrlRef.current, true);
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [user]);
 
   // useEffect(() => {
   //   const initialize = async () => {
@@ -144,27 +105,14 @@ const App: React.FC = () => {
   //         teachersRef.current = INITIAL_TEACHERS;
   //       }
         
-  //       // Load from localStorage first for immediate display
   //       setSubmissions(savedSubmissions ? JSON.parse(savedSubmissions) : []);
   //       setResubmitRequests(savedRequests ? JSON.parse(savedRequests) : []);
 
   //       if (savedUser) {
-  //         try { 
-  //           const userObj = JSON.parse(savedUser);
-  //           setUser(userObj);
-  //           // Force refresh immediately after setting user
-  //           if (activeSyncUrl) {
-  //             await fetchRegistryFromCloud(activeSyncUrl, true);
-  //           }
-  //         } catch (e) { 
-  //           sessionStorage.removeItem('sh_user'); 
-  //         }
+  //         try { setUser(JSON.parse(savedUser)); } catch (e) { sessionStorage.removeItem('sh_user'); }
   //       }
 
-  //       // ALWAYS fetch from cloud on initialization
-  //       if (activeSyncUrl) {
-  //         await fetchRegistryFromCloud(activeSyncUrl, true);
-  //       }
+  //       if (activeSyncUrl) await fetchRegistryFromCloud(activeSyncUrl);
   //     } finally {
   //       setIsInitializing(false);
   //     }
@@ -172,7 +120,7 @@ const App: React.FC = () => {
   //   initialize();
   // }, []);
 
-useEffect(() => {
+  useEffect(() => {
   const initialize = async () => {
     try {
       const savedUser = sessionStorage.getItem('sh_user');
@@ -230,17 +178,11 @@ useEffect(() => {
   const updateSubmissions = async (newSubs: WeeklySubmission[]) => {
     setSubmissions(newSubs);
     localStorage.setItem('sh_submissions_v2', JSON.stringify(newSubs));
-    setDataVersion(prev => prev + 1);
-    
     const latestSub = newSubs[newSubs.length - 1];
     if (syncUrlRef.current && latestSub) {
-      await cloudPost(syncUrlRef.current, { 
-        ...latestSub, 
-        action: 'SUBMIT_PLAN',
-        _dataVersion: dataVersion + 1
-      });
+      await cloudPost(syncUrlRef.current, { ...latestSub, action: 'SUBMIT_PLAN' });
       // Immediate refetch to confirm sync
-      setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current, true), 2000);
+      setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current), 2000);
     }
   };
 
@@ -248,16 +190,7 @@ useEffect(() => {
     const updated = [...resubmitRequests, req];
     setResubmitRequests(updated);
     localStorage.setItem('sh_resubmit_requests', JSON.stringify(updated));
-    setDataVersion(prev => prev + 1);
-    
-    if (syncUrlRef.current) {
-      await cloudPost(syncUrlRef.current, { 
-        ...req, 
-        action: 'REQUEST_RESUBMIT',
-        _dataVersion: dataVersion + 1 
-      });
-      setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current, true), 2000);
-    }
+    if (syncUrlRef.current) await cloudPost(syncUrlRef.current, { ...req, action: 'REQUEST_RESUBMIT' });
   };
 
   const handleApproveResubmit = async (requestId: string) => {
@@ -277,8 +210,6 @@ useEffect(() => {
       setSubmissions(updatedSubmissions);
       localStorage.setItem('sh_submissions_v2', JSON.stringify(updatedSubmissions));
       
-      setDataVersion(prev => prev + 1);
-      
       // 3. Send approval to backend
       if (syncUrlRef.current) {
         await cloudPost(syncUrlRef.current, { 
@@ -286,17 +217,16 @@ useEffect(() => {
           requestId: request.id,
           teacherEmail: request.teacherEmail,
           teacherName: request.teacherName,
-          weekStarting: request.weekStarting,
-          _dataVersion: dataVersion + 1
+          weekStarting: request.weekStarting 
         });
         
         // 4. Force refresh data from cloud
-        setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current, true), 1000);
+        setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current), 1000);
       }
     } catch (error) {
       console.error("Failed to approve resubmit:", error);
       // Revert if failed
-      fetchRegistryFromCloud(syncUrlRef.current, true);
+      fetchRegistryFromCloud(syncUrlRef.current);
     }
   };
 
@@ -312,25 +242,22 @@ useEffect(() => {
       setSubmissions(updatedSubmissions);
       localStorage.setItem('sh_submissions_v2', JSON.stringify(updatedSubmissions));
       
-      setDataVersion(prev => prev + 1);
-      
       // 2. Send reset to backend
       if (syncUrlRef.current) {
         await cloudPost(syncUrlRef.current, { 
           action: 'RESET_SUBMISSION', 
           teacherEmail: sub.teacherEmail, 
           teacherName: sub.teacherName, 
-          weekStarting: week,
-          _dataVersion: dataVersion + 1
+          weekStarting: week 
         });
         
         // 3. Force refresh data from cloud
-        setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current, true), 1000);
+        setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current), 1000);
       }
     } catch (error) {
       console.error("Failed to force reset:", error);
       // Revert if failed
-      fetchRegistryFromCloud(syncUrlRef.current, true);
+      fetchRegistryFromCloud(syncUrlRef.current);
     }
   };
 
@@ -338,31 +265,13 @@ useEffect(() => {
     setTeachers(newTeachers);
     teachersRef.current = newTeachers;
     localStorage.setItem('sh_teachers_v4', JSON.stringify(newTeachers));
-    setDataVersion(prev => prev + 1);
-    
-    cloudPost(syncUrlRef.current || syncUrl, { 
-      action: 'SYNC_REGISTRY', 
-      teachers: newTeachers,
-      _dataVersion: dataVersion + 1
-    });
+    cloudPost(syncUrlRef.current || syncUrl, { action: 'SYNC_REGISTRY', teachers: newTeachers });
   };
 
   const handleManualResetRegistry = async () => {
     updateTeachers(INITIAL_TEACHERS);
-    setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current, true), 1000);
     alert("Database restored to defaults.");
   };
-
-  const handleRefreshData = useCallback(async (): Promise<boolean> => {
-    if (syncUrlRef.current) {
-      const success = await fetchRegistryFromCloud(syncUrlRef.current, true);
-      if (success) {
-        setLastSync(new Date());
-      }
-      return success;
-    }
-    return false;
-  }, []);
 
   if (isInitializing) {
     return (
@@ -438,13 +347,7 @@ useEffect(() => {
               </div>
               <div className="relative group">
                 <button 
-                  onClick={() => { 
-                    setUser(null); 
-                    sessionStorage.removeItem('sh_user');
-                    // Clear local storage on logout
-                    localStorage.removeItem('sh_submissions_v2');
-                    localStorage.removeItem('sh_resubmit_requests');
-                  }} 
+                  onClick={() => { setUser(null); sessionStorage.removeItem('sh_user'); }} 
                   className="w-12 h-12 flex items-center justify-center rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 hover:from-blue-100 hover:to-indigo-100 transition-all shadow-sm hover:shadow-md group-hover:scale-105"
                 >
                   <i className="fas fa-sign-out-alt"></i>
@@ -464,14 +367,10 @@ useEffect(() => {
             <Login 
               onLogin={(u) => { 
                 setUser(u); 
-                sessionStorage.setItem('sh_user', JSON.stringify(u));
-                // Force refresh on login
-                if (syncUrlRef.current) {
-                  fetchRegistryFromCloud(syncUrlRef.current, true);
-                }
+                sessionStorage.setItem('sh_user', JSON.stringify(u)); 
               }} 
               teachers={teachers} 
-              onSyncRegistry={() => fetchRegistryFromCloud(syncUrl, true)} 
+              onSyncRegistry={fetchRegistryFromCloud} 
               syncUrl={syncUrl} 
             />
           ) : 'isAdmin' in user ? (
@@ -492,9 +391,8 @@ useEffect(() => {
               onSendPdf={async (p, r, c, f) => cloudPost(syncUrl, { action: 'SEND_COMPILED_PDF', pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday() })}
               onResetRegistry={handleManualResetRegistry}
               onForceReset={handleForceReset}
-              onRefreshData={handleRefreshData}
+              onRefreshData={() => fetchRegistryFromCloud(syncUrl)}
               lastSync={lastSync}
-              dataVersion={dataVersion}
             />
           ) : (
             <TeacherDashboard 
@@ -514,7 +412,6 @@ useEffect(() => {
               onSendPdf={async (p, r, c, f) => cloudPost(syncUrl, { action: 'SEND_COMPILED_PDF', pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday() })}
               onResubmitRequest={handleRequestResubmit}
               resubmitRequests={resubmitRequests}
-              dataVersion={dataVersion}
             />
           )}
         </div>
