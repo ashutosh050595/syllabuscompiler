@@ -433,9 +433,8 @@ const App: React.FC = () => {
               onSendPdf={async (p, r, c, f) => cloudPost(syncUrl, { action: 'SEND_COMPILED_PDF', pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday() })}
               onResetRegistry={handleManualResetRegistry}
               onForceReset={handleForceReset}
-              onRefreshData={() => fetchRegistryFromCloud(syncUrl, true)}
+              onRefreshData={refreshAllData}
               lastSync={lastSync}
-              refreshAllData={refreshAllData}
               dataVersion={dataVersion}
             />
           ) : (
@@ -456,7 +455,6 @@ const App: React.FC = () => {
               onSendPdf={async (p, r, c, f) => cloudPost(syncUrl, { action: 'SEND_COMPILED_PDF', pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday() })}
               onResubmitRequest={handleRequestResubmit}
               resubmitRequests={resubmitRequests}
-              refreshAllData={refreshAllData}
               lastSync={lastSync}
               dataVersion={dataVersion}
             />
