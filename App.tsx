@@ -120,57 +120,112 @@ const App: React.FC = () => {
     };
   }, [user]);
 
-  useEffect(() => {
-    const initialize = async () => {
-      try {
-        const savedTeachers = localStorage.getItem('sh_teachers_v4');
-        const savedSubmissions = localStorage.getItem('sh_submissions_v2');
-        const savedRequests = localStorage.getItem('sh_resubmit_requests');
-        const savedUser = sessionStorage.getItem('sh_user');
+  // useEffect(() => {
+  //   const initialize = async () => {
+  //     try {
+  //       const savedTeachers = localStorage.getItem('sh_teachers_v4');
+  //       const savedSubmissions = localStorage.getItem('sh_submissions_v2');
+  //       const savedRequests = localStorage.getItem('sh_resubmit_requests');
+  //       const savedUser = sessionStorage.getItem('sh_user');
         
-        const params = new URLSearchParams(window.location.search);
-        let activeSyncUrl = params.get('sync') || localStorage.getItem('sh_sync_url') || DEFAULT_SYNC_URL;
+  //       const params = new URLSearchParams(window.location.search);
+  //       let activeSyncUrl = params.get('sync') || localStorage.getItem('sh_sync_url') || DEFAULT_SYNC_URL;
         
-        setSyncUrl(activeSyncUrl);
-        syncUrlRef.current = activeSyncUrl;
-        localStorage.setItem('sh_sync_url', activeSyncUrl);
+  //       setSyncUrl(activeSyncUrl);
+  //       syncUrlRef.current = activeSyncUrl;
+  //       localStorage.setItem('sh_sync_url', activeSyncUrl);
 
-        if (savedTeachers) {
-          const t = JSON.parse(savedTeachers);
+  //       if (savedTeachers) {
+  //         const t = JSON.parse(savedTeachers);
+  //         setTeachers(t);
+  //         teachersRef.current = t;
+  //       } else {
+  //         setTeachers(INITIAL_TEACHERS);
+  //         teachersRef.current = INITIAL_TEACHERS;
+  //       }
+        
+  //       // Load from localStorage first for immediate display
+  //       setSubmissions(savedSubmissions ? JSON.parse(savedSubmissions) : []);
+  //       setResubmitRequests(savedRequests ? JSON.parse(savedRequests) : []);
+
+  //       if (savedUser) {
+  //         try { 
+  //           const userObj = JSON.parse(savedUser);
+  //           setUser(userObj);
+  //           // Force refresh immediately after setting user
+  //           if (activeSyncUrl) {
+  //             await fetchRegistryFromCloud(activeSyncUrl, true);
+  //           }
+  //         } catch (e) { 
+  //           sessionStorage.removeItem('sh_user'); 
+  //         }
+  //       }
+
+  //       // ALWAYS fetch from cloud on initialization
+  //       if (activeSyncUrl) {
+  //         await fetchRegistryFromCloud(activeSyncUrl, true);
+  //       }
+  //     } finally {
+  //       setIsInitializing(false);
+  //     }
+  //   };
+  //   initialize();
+  // }, []);
+
+useEffect(() => {
+  const initialize = async () => {
+    try {
+      const savedUser = sessionStorage.getItem('sh_user');
+
+      const params = new URLSearchParams(window.location.search);
+      let activeSyncUrl =
+        params.get('sync') ||
+        localStorage.getItem('sh_sync_url') ||
+        DEFAULT_SYNC_URL;
+
+      setSyncUrl(activeSyncUrl);
+      syncUrlRef.current = activeSyncUrl;
+      localStorage.setItem('sh_sync_url', activeSyncUrl);
+
+      /* ---------------- USER ---------------- */
+      if (savedUser) {
+        try {
+          const userObj = JSON.parse(savedUser);
+          setUser(userObj);
+        } catch {
+          sessionStorage.removeItem('sh_user');
+        }
+      }
+
+      /* ---------------- CLOUD FIRST ---------------- */
+      if (activeSyncUrl) {
+        try {
+          await fetchRegistryFromCloud(activeSyncUrl, true);
+          // fetchRegistryFromCloud MUST update:
+          // setTeachers, setSubmissions, setResubmitRequests
+        } catch (err) {
+          /* ---------------- FALLBACK ONLY IF CLOUD FAILS ---------------- */
+          const savedTeachers = localStorage.getItem('sh_teachers_v4');
+          const savedSubmissions = localStorage.getItem('sh_submissions_v2');
+          const savedRequests = localStorage.getItem('sh_resubmit_requests');
+
+          const t = savedTeachers ? JSON.parse(savedTeachers) : INITIAL_TEACHERS;
+          const s = savedSubmissions ? JSON.parse(savedSubmissions) : [];
+          const r = savedRequests ? JSON.parse(savedRequests) : [];
+
           setTeachers(t);
           teachersRef.current = t;
-        } else {
-          setTeachers(INITIAL_TEACHERS);
-          teachersRef.current = INITIAL_TEACHERS;
+          setSubmissions(s);
+          setResubmitRequests(r);
         }
-        
-        // Load from localStorage first for immediate display
-        setSubmissions(savedSubmissions ? JSON.parse(savedSubmissions) : []);
-        setResubmitRequests(savedRequests ? JSON.parse(savedRequests) : []);
-
-        if (savedUser) {
-          try { 
-            const userObj = JSON.parse(savedUser);
-            setUser(userObj);
-            // Force refresh immediately after setting user
-            if (activeSyncUrl) {
-              await fetchRegistryFromCloud(activeSyncUrl, true);
-            }
-          } catch (e) { 
-            sessionStorage.removeItem('sh_user'); 
-          }
-        }
-
-        // ALWAYS fetch from cloud on initialization
-        if (activeSyncUrl) {
-          await fetchRegistryFromCloud(activeSyncUrl, true);
-        }
-      } finally {
-        setIsInitializing(false);
       }
-    };
-    initialize();
-  }, []);
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  initialize();
+}, []);
 
   const updateSubmissions = async (newSubs: WeeklySubmission[]) => {
     setSubmissions(newSubs);
