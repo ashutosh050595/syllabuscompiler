@@ -15,41 +15,19 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [showNotification, setShowNotification] = useState(true);
-  const [syncCounter, setSyncCounter] = useState(0); // Force re-render on sync
-  const [deviceId, setDeviceId] = useState<string>(''); // Unique device ID
   
   const teachersRef = useRef<Teacher[]>([]);
   const syncUrlRef = useRef<string>('');
-  const lastFetchRef = useRef<number>(0);
-  const isFetchingRef = useRef<boolean>(false);
 
-  // Generate or get unique device ID
-  useEffect(() => {
-    let storedDeviceId = localStorage.getItem('sh_device_id');
-    if (!storedDeviceId) {
-      storedDeviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('sh_device_id', storedDeviceId);
-    }
-    setDeviceId(storedDeviceId);
-  }, []);
-
-  // Enhanced cloud POST with device info
+  // Enhanced cloud POST using URLSearchParams for best cross-device compatibility in no-cors mode
   const cloudPost = async (url: string, payload: any) => {
     if (!url || !url.startsWith('http')) return false;
     try {
-      // Add device info to every request
-      const enhancedPayload = {
-        ...payload,
-        _deviceId: deviceId,
-        _deviceType: /Mobile|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-        _timestamp: new Date().toISOString()
-      };
-      
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ [JSON.stringify(enhancedPayload)]: '' }),
+        body: new URLSearchParams({ [JSON.stringify(payload)]: '' }),
       });
       return true;
     } catch (err) {
@@ -58,19 +36,11 @@ const App: React.FC = () => {
     }
   };
 
-  // Force refresh all data from cloud
-  const forceRefreshAllData = async (url: string): Promise<boolean> => {
+  const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
     if (!url || !url.startsWith('http')) return false;
     try {
-      const fetchUrl = url.includes('?') ? `${url}&force=${Date.now()}` : `${url}?force=${Date.now()}`;
-      const response = await fetch(fetchUrl, { 
-        redirect: 'follow',
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }
-      }); 
+      const fetchUrl = url.includes('?') ? `${url}&t=${Date.now()}` : `${url}?t=${Date.now()}`;
+      const response = await fetch(fetchUrl, { redirect: 'follow' }); 
       const data = await response.json();
       
       if (data.result === 'success') {
@@ -91,190 +61,24 @@ const App: React.FC = () => {
         }
         
         setLastSync(new Date());
-        setSyncCounter(prev => prev + 1); // Force re-render
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.debug("Force refresh failed:", err);
-      return false;
-    }
-  };
-
-  // Optimized cloud fetch with debouncing
-  const fetchRegistryFromCloud = async (url: string, force: boolean = false): Promise<boolean> => {
-    if (!url || !url.startsWith('http')) return false;
-    
-    // Debounce: Don't fetch more than once every 3 seconds
-    const now = Date.now();
-    if (!force && now - lastFetchRef.current < 3000) {
-      return false;
-    }
-    
-    if (isFetchingRef.current) return false;
-    
-    isFetchingRef.current = true;
-    lastFetchRef.current = now;
-    
-    try {
-      const fetchUrl = url.includes('?') ? `${url}&t=${now}&d=${deviceId}` : `${url}?t=${now}&d=${deviceId}`;
-      const response = await fetch(fetchUrl, { 
-        redirect: 'follow',
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }
-      }); 
-      const data = await response.json();
-      
-      if (data.result === 'success') {
-        // Merge with existing data instead of replace
-        if (data.teachers && Array.isArray(data.teachers)) {
-          // Merge teachers, giving priority to cloud data
-          const mergedTeachers = mergeDataArrays(teachers, data.teachers, 'id');
-          setTeachers(mergedTeachers);
-          teachersRef.current = mergedTeachers;
-          localStorage.setItem('sh_teachers_v4', JSON.stringify(mergedTeachers));
-        }
-
-        if (data.requests && Array.isArray(data.requests)) {
-          // Only show pending requests
-          const pendingRequests = data.requests.filter((req: ResubmitRequest) => req.status === 'pending');
-          const mergedRequests = mergeDataArrays(resubmitRequests, pendingRequests, 'id');
-          setResubmitRequests(mergedRequests);
-          localStorage.setItem('sh_resubmit_requests', JSON.stringify(mergedRequests));
-        }
-
-        if (data.submissions && Array.isArray(data.submissions)) {
-          // Merge submissions, cloud data takes precedence
-          const mergedSubmissions = mergeDataArrays(submissions, data.submissions, 'id');
-          setSubmissions(mergedSubmissions);
-          localStorage.setItem('sh_submissions_v2', JSON.stringify(mergedSubmissions));
-        }
-        
-        setLastSync(new Date());
-        setSyncCounter(prev => prev + 1);
         return true;
       }
       return false;
     } catch (err) {
       console.debug("Fetch sync failed:", err);
       return false;
-    } finally {
-      isFetchingRef.current = false;
     }
   };
 
-  // Helper function to merge arrays by key
-  const mergeDataArrays = <T extends Record<string, any>>(localData: T[], cloudData: T[], key: string): T[] => {
-    const mergedMap = new Map<string, T>();
-    
-    // First add all local data
-    localData.forEach(item => {
-      if (item[key]) {
-        mergedMap.set(String(item[key]), item);
-      }
-    });
-    
-    // Then add/overwrite with cloud data (cloud data has priority)
-    cloudData.forEach(item => {
-      if (item[key]) {
-        mergedMap.set(String(item[key]), item);
-      }
-    });
-    
-    return Array.from(mergedMap.values());
-  };
-
-  // REAL-TIME SYNC: Sync every 15 seconds when user is logged in
+  // POLLING EFFECT: If Admin is logged in, sync every 60 seconds
   useEffect(() => {
     let interval: any;
-    
-    const syncFunction = async () => {
-      if (syncUrl && user) {
-        await fetchRegistryFromCloud(syncUrl);
-      }
-    };
-    
-    if (user && syncUrl) {
-      // Initial sync
-      syncFunction();
-      
-      // Set up interval for regular sync
+    if (user && 'isAdmin' in user && syncUrl) {
       interval = setInterval(() => {
-        syncFunction();
-      }, 15000); // Every 15 seconds
-    }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [user, syncUrl]);
-
-  // Listen for storage events (cross-tab sync on same device)
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'sh_teachers_v4' && e.newValue) {
-        try {
-          const newTeachers = JSON.parse(e.newValue);
-          setTeachers(newTeachers);
-          teachersRef.current = newTeachers;
-        } catch (error) {
-          console.error('Failed to parse teachers from storage:', error);
-        }
-      }
-      
-      if (e.key === 'sh_submissions_v2' && e.newValue) {
-        try {
-          const newSubmissions = JSON.parse(e.newValue);
-          setSubmissions(newSubmissions);
-        } catch (error) {
-          console.error('Failed to parse submissions from storage:', error);
-        }
-      }
-      
-      if (e.key === 'sh_resubmit_requests' && e.newValue) {
-        try {
-          const newRequests = JSON.parse(e.newValue);
-          setResubmitRequests(newRequests);
-        } catch (error) {
-          console.error('Failed to parse requests from storage:', error);
-        }
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
-
-  // Periodically check for updates even when tab is in background
-  useEffect(() => {
-    let visibilityInterval: any;
-    
-    const handleVisibilityChange = () => {
-      if (!document.hidden && syncUrl && user) {
-        // Tab became visible, force refresh
-        fetchRegistryFromCloud(syncUrl, true);
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Even in background, sync every 30 seconds
-    if (user && syncUrl) {
-      visibilityInterval = setInterval(() => {
         fetchRegistryFromCloud(syncUrl);
-      }, 30000);
+      }, 60000);
     }
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (visibilityInterval) clearInterval(visibilityInterval);
-    };
+    return () => clearInterval(interval);
   }, [user, syncUrl]);
 
   useEffect(() => {
@@ -308,10 +112,7 @@ const App: React.FC = () => {
           try { setUser(JSON.parse(savedUser)); } catch (e) { sessionStorage.removeItem('sh_user'); }
         }
 
-        if (activeSyncUrl) {
-          // Force initial sync with cloud
-          await forceRefreshAllData(activeSyncUrl);
-        }
+        if (activeSyncUrl) await fetchRegistryFromCloud(activeSyncUrl);
       } finally {
         setIsInitializing(false);
       }
@@ -319,58 +120,22 @@ const App: React.FC = () => {
     initialize();
   }, []);
 
-  // Broadcast changes to other tabs/windows on same device
-  const broadcastChange = (key: string, data: any) => {
-    localStorage.setItem(key, JSON.stringify(data));
-    // Manually dispatch storage event for other tabs
-    window.dispatchEvent(new StorageEvent('storage', {
-      key,
-      newValue: JSON.stringify(data),
-      oldValue: localStorage.getItem(key),
-      storageArea: localStorage
-    }));
-  };
-
   const updateSubmissions = async (newSubs: WeeklySubmission[]) => {
-    // Immediately update local state
     setSubmissions(newSubs);
-    broadcastChange('sh_submissions_v2', newSubs);
-    
-    // Get the latest submission (if any)
+    localStorage.setItem('sh_submissions_v2', JSON.stringify(newSubs));
     const latestSub = newSubs[newSubs.length - 1];
     if (syncUrlRef.current && latestSub) {
-      // Add device info
-      const payload = {
-        ...latestSub,
-        action: 'SUBMIT_PLAN',
-        _deviceId: deviceId,
-        _deviceType: /Mobile|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
-      };
-      
-      await cloudPost(syncUrlRef.current, payload);
-      
-      // Force immediate sync across all devices
-      setTimeout(() => {
-        fetchRegistryFromCloud(syncUrlRef.current, true);
-      }, 1000);
+      await cloudPost(syncUrlRef.current, { ...latestSub, action: 'SUBMIT_PLAN' });
+      // Immediate refetch to confirm sync
+      setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current), 2000);
     }
   };
 
   const handleRequestResubmit = async (req: ResubmitRequest) => {
     const updated = [...resubmitRequests, req];
     setResubmitRequests(updated);
-    broadcastChange('sh_resubmit_requests', updated);
-    
-    if (syncUrlRef.current) {
-      await cloudPost(syncUrlRef.current, { 
-        ...req, 
-        action: 'REQUEST_RESUBMIT',
-        _deviceId: deviceId 
-      });
-      
-      // Force immediate sync
-      setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current, true), 1000);
-    }
+    localStorage.setItem('sh_resubmit_requests', JSON.stringify(updated));
+    if (syncUrlRef.current) await cloudPost(syncUrlRef.current, { ...req, action: 'REQUEST_RESUBMIT' });
   };
 
   const handleApproveResubmit = async (requestId: string) => {
@@ -381,14 +146,14 @@ const App: React.FC = () => {
       // 1. Remove the request from local state immediately
       const updatedRequests = resubmitRequests.filter(r => r.id !== requestId);
       setResubmitRequests(updatedRequests);
-      broadcastChange('sh_resubmit_requests', updatedRequests);
+      localStorage.setItem('sh_resubmit_requests', JSON.stringify(updatedRequests));
       
       // 2. Remove the teacher's submission from the current week
       const updatedSubmissions = submissions.filter(s => 
         !(s.teacherEmail === request.teacherEmail && s.weekStarting === request.weekStarting)
       );
       setSubmissions(updatedSubmissions);
-      broadcastChange('sh_submissions_v2', updatedSubmissions);
+      localStorage.setItem('sh_submissions_v2', JSON.stringify(updatedSubmissions));
       
       // 3. Send approval to backend
       if (syncUrlRef.current) {
@@ -397,17 +162,16 @@ const App: React.FC = () => {
           requestId: request.id,
           teacherEmail: request.teacherEmail,
           teacherName: request.teacherName,
-          weekStarting: request.weekStarting,
-          _deviceId: deviceId
+          weekStarting: request.weekStarting 
         });
         
-        // 4. Force immediate sync across all devices
-        setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current, true), 500);
+        // 4. Force refresh data from cloud
+        setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current), 1000);
       }
     } catch (error) {
       console.error("Failed to approve resubmit:", error);
       // Revert if failed
-      fetchRegistryFromCloud(syncUrlRef.current, true);
+      fetchRegistryFromCloud(syncUrlRef.current);
     }
   };
 
@@ -421,7 +185,7 @@ const App: React.FC = () => {
         !(s.teacherId === teacherId && s.weekStarting === week)
       );
       setSubmissions(updatedSubmissions);
-      broadcastChange('sh_submissions_v2', updatedSubmissions);
+      localStorage.setItem('sh_submissions_v2', JSON.stringify(updatedSubmissions));
       
       // 2. Send reset to backend
       if (syncUrlRef.current) {
@@ -429,44 +193,29 @@ const App: React.FC = () => {
           action: 'RESET_SUBMISSION', 
           teacherEmail: sub.teacherEmail, 
           teacherName: sub.teacherName, 
-          weekStarting: week,
-          _deviceId: deviceId
+          weekStarting: week 
         });
         
-        // 3. Force immediate sync across all devices
-        setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current, true), 500);
+        // 3. Force refresh data from cloud
+        setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current), 1000);
       }
     } catch (error) {
       console.error("Failed to force reset:", error);
-      fetchRegistryFromCloud(syncUrlRef.current, true);
+      // Revert if failed
+      fetchRegistryFromCloud(syncUrlRef.current);
     }
   };
 
   const updateTeachers = (newTeachers: Teacher[]) => {
     setTeachers(newTeachers);
     teachersRef.current = newTeachers;
-    broadcastChange('sh_teachers_v4', newTeachers);
-    
-    cloudPost(syncUrlRef.current || syncUrl, { 
-      action: 'SYNC_REGISTRY', 
-      teachers: newTeachers,
-      _deviceId: deviceId 
-    }).then(() => {
-      setTimeout(() => fetchRegistryFromCloud(syncUrlRef.current, true), 1000);
-    });
+    localStorage.setItem('sh_teachers_v4', JSON.stringify(newTeachers));
+    cloudPost(syncUrlRef.current || syncUrl, { action: 'SYNC_REGISTRY', teachers: newTeachers });
   };
 
   const handleManualResetRegistry = async () => {
     updateTeachers(INITIAL_TEACHERS);
     alert("Database restored to defaults.");
-  };
-
-  // Manual sync function exposed to components
-  const manualSync = async () => {
-    if (syncUrl) {
-      await forceRefreshAllData(syncUrl);
-      alert('Data synchronized successfully!');
-    }
   };
 
   if (isInitializing) {
@@ -491,23 +240,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30">
-      {/* Sync Status Bar */}
-      <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 text-center text-sm">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
-            <span>Real-time Sync: {lastSync ? `Last updated ${new Date(lastSync).toLocaleTimeString()}` : 'Connecting...'}</span>
-          </div>
-          <button 
-            onClick={manualSync}
-            className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full flex items-center gap-1"
-          >
-            <i className="fas fa-sync-alt"></i>
-            Sync Now
-          </button>
-        </div>
-      </div>
-
       {/* Welcome Notification */}
       {showNotification && !user && (
         <div className="animate-in slide-in-from-top-4 fade-in duration-500">
@@ -557,9 +289,6 @@ const App: React.FC = () => {
                   <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
                   <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{user.email}</p>
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  {/Mobile|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? '📱 Mobile' : '💻 Desktop'}
-                </p>
               </div>
               <div className="relative group">
                 <button 
@@ -586,12 +315,11 @@ const App: React.FC = () => {
                 sessionStorage.setItem('sh_user', JSON.stringify(u)); 
               }} 
               teachers={teachers} 
-              onSyncRegistry={() => fetchRegistryFromCloud(syncUrl, true)} 
+              onSyncRegistry={fetchRegistryFromCloud} 
               syncUrl={syncUrl} 
             />
           ) : 'isAdmin' in user ? (
             <AdminDashboard 
-              key={`admin-${syncCounter}`} // Force re-render on sync
               teachers={teachers} 
               setTeachers={updateTeachers}
               submissions={submissions} 
@@ -604,17 +332,15 @@ const App: React.FC = () => {
                 syncUrlRef.current = u; 
                 localStorage.setItem('sh_sync_url', u); 
               }}
-              onSendWarnings={async (d, w) => cloudPost(syncUrl, { action: 'SEND_WARNINGS', defaulters: d, weekStarting: w, portalLink: PORTAL_LINK, _deviceId: deviceId })}
-              onSendPdf={async (p, r, c, f) => cloudPost(syncUrl, { action: 'SEND_COMPILED_PDF', pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday(), _deviceId: deviceId })}
+              onSendWarnings={async (d, w) => cloudPost(syncUrl, { action: 'SEND_WARNINGS', defaulters: d, weekStarting: w, portalLink: PORTAL_LINK })}
+              onSendPdf={async (p, r, c, f) => cloudPost(syncUrl, { action: 'SEND_COMPILED_PDF', pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday() })}
               onResetRegistry={handleManualResetRegistry}
               onForceReset={handleForceReset}
-              onRefreshData={() => fetchRegistryFromCloud(syncUrl, true)}
-              onManualSync={manualSync}
+              onRefreshData={() => fetchRegistryFromCloud(syncUrl)}
               lastSync={lastSync}
             />
           ) : (
             <TeacherDashboard 
-              key={`teacher-${syncCounter}`} // Force re-render on sync
               teacher={user as Teacher} 
               teachers={teachers}
               submissions={submissions} 
@@ -627,11 +353,10 @@ const App: React.FC = () => {
                 syncUrlRef.current = u; 
                 localStorage.setItem('sh_sync_url', u); 
               }}
-              onSendWarnings={(d, w) => cloudPost(syncUrl, { action: 'SEND_WARNINGS', defaulters: d, weekStarting: w, portalLink: PORTAL_LINK, _deviceId: deviceId })}
-              onSendPdf={async (p, r, c, f) => cloudPost(syncUrl, { action: 'SEND_COMPILED_PDF', pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday(), _deviceId: deviceId })}
+              onSendWarnings={(d, w) => cloudPost(syncUrl, { action: 'SEND_WARNINGS', defaulters: d, weekStarting: w, portalLink: PORTAL_LINK })}
+              onSendPdf={async (p, r, c, f) => cloudPost(syncUrl, { action: 'SEND_COMPILED_PDF', pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday() })}
               onResubmitRequest={handleRequestResubmit}
               resubmitRequests={resubmitRequests}
-              onManualSync={manualSync}
             />
           )}
         </div>
@@ -672,12 +397,6 @@ const App: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-sm">This Week's Submissions</span>
                   <span className="text-sm font-bold">{submissions.filter(s => s.weekStarting === getCurrentWeekMonday()).length}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Sync Status</span>
-                  <span className="text-xs font-bold">
-                    {lastSync ? `${Math.round((Date.now() - lastSync.getTime()) / 1000)}s ago` : 'Never'}
-                  </span>
                 </div>
               </div>
             </div>
