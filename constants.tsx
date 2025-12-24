@@ -10,7 +10,7 @@ export const PORTAL_LINK = "https://syllabuscompiler-ruddy.vercel.app/";
  * HARDCODED BACKEND: Set this to your deployed Google Apps Script URL.
  * This ensures new devices automatically connect without manual setup.
  */
-export const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbzneUwW0b2-jb_MF1nyUPUMDpZeNLYn__4bosmvZAZdLwnpRL5a-2BjZOuUvp080UEX1A/exec"; 
+export const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbylRzoDjvkofnIN7XlSzEBOLuIpOjyYgN-n1mh613D0T50drwtizfA9XpKpgNbQ3DyNVQ/exec"; 
 
 export const SCHOOL_LOGO_URL = "logo.png"; 
 
