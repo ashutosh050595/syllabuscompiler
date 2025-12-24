@@ -298,11 +298,15 @@ const App: React.FC = () => {
     alert("Database restored to defaults.");
   };
 
-  const refreshAllData = useCallback(async () => {
+  const handleRefreshData = useCallback(async (): Promise<boolean> => {
     if (syncUrlRef.current) {
-      await fetchRegistryFromCloud(syncUrlRef.current, true);
-      setLastSync(new Date());
+      const success = await fetchRegistryFromCloud(syncUrlRef.current, true);
+      if (success) {
+        setLastSync(new Date());
+      }
+      return success;
     }
+    return false;
   }, []);
 
   if (isInitializing) {
@@ -433,7 +437,7 @@ const App: React.FC = () => {
               onSendPdf={async (p, r, c, f) => cloudPost(syncUrl, { action: 'SEND_COMPILED_PDF', pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday() })}
               onResetRegistry={handleManualResetRegistry}
               onForceReset={handleForceReset}
-              onRefreshData={refreshAllData}
+              onRefreshData={handleRefreshData}
               lastSync={lastSync}
               dataVersion={dataVersion}
             />
@@ -455,7 +459,6 @@ const App: React.FC = () => {
               onSendPdf={async (p, r, c, f) => cloudPost(syncUrl, { action: 'SEND_COMPILED_PDF', pdfBase64: p, recipient: r, className: c, filename: f, weekStarting: getNextWeekMonday() })}
               onResubmitRequest={handleRequestResubmit}
               resubmitRequests={resubmitRequests}
-              lastSync={lastSync}
               dataVersion={dataVersion}
             />
           )}
