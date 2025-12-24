@@ -36,7 +36,7 @@ const App: React.FC = () => {
     }
   };
 
-  const fetchRegistryFromCloud = async (url: string): Promise<boolean> => {
+  const fetchRegistryFromCloud = async (url: string, force?: boolean): Promise<boolean> => {
     if (!url || !url.startsWith('http')) return false;
     try {
       const fetchUrl = url.includes('?') ? `${url}&t=${Date.now()}` : `${url}?t=${Date.now()}`;
