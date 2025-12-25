@@ -273,17 +273,15 @@ function doGet(e) {
   const ss = SpreadsheetApp.getActive();
 
   const response = {
-    ok: true,
+    result: "success",
     serverTime: new Date().toISOString(),
     device: {
       id: deviceId,
       type: deviceType
     },
-    registry: {
-      teachers: readSheet(ss, 'Teachers'),
-      submissions: readSheet(ss, 'Submissions'),
-      resubmitRequests: readSheet(ss, 'ResubmitRequests')
-    }
+    teachers: readSheet(ss, 'Registry'),
+    submissions: readSheet(ss, 'Submissions'),
+    requests: readSheet(ss, 'Requests')
   };
 
   return ContentService
@@ -572,6 +570,26 @@ function ensureSheetExists(sheetName, headers) {
     }
   }
   return sheet;
+}
+
+function readSheet(ss, sheetName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return [];
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+
+  const headers = values[0].map(h =>
+    String(h).trim().toLowerCase()
+  );
+
+  return values.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => {
+      obj[h] = row[i];
+    });
+    return obj;
+  });
 }
 
 function generateId() {
@@ -2609,10 +2627,12 @@ function jsonResponse(res, dataOrMsg) {
   response.setMimeType(ContentService.MimeType.JSON);
   
   // Set CORS headers individually
-  response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  response.setHeader("Pragma", "no-cache");
-  response.setHeader("Expires", "0");
+  if (typeof response.setHeader === 'function') {
+    response.setHeader("Access-Control-Allow-Origin", "*");
+    response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response.setHeader("Pragma", "no-cache");
+    response.setHeader("Expires", "0");
+  }
   
   return response;
 }
@@ -3019,5 +3039,64 @@ function clearAllDeviceLogs() {
     
   } catch (error) {
     Logger.log(`Error clearing logs: ${error}`);
+  }
+}
+
+/**
+ * Helpers to bootstrap the Registry sheet from JSON (useful when constants live outside Apps Script)
+ */
+function importRegistryFromJson(jsonString) {
+  try {
+    const data = JSON.parse(jsonString);
+    if (!data || !Array.isArray(data.teachers)) {
+      return jsonResponse("error", "Invalid JSON: expected { teachers: [...] }");
+    }
+    return handleSyncRegistry({ teachers: data.teachers });
+  } catch (err) {
+    return jsonResponse("error", "Failed to parse JSON: " + err.message);
+  }
+}
+
+function runInitialSyncFromScriptProperty() {
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty('DEFAULT_TEACHERS_JSON');
+    if (!raw) return jsonResponse('error', 'No DEFAULT_TEACHERS_JSON script property found');
+    return importRegistryFromJson(raw);
+  } catch (err) {
+    return jsonResponse('error', 'Initial sync failed: ' + err.message);
+  }
+}
+
+function runInitialSyncManual(teachersArray) {
+  // Call this from the script editor with an array of teacher objects
+  return handleSyncRegistry({ teachers: teachersArray });
+}
+
+/**
+ * Easiest quick-seed helper for local testing.
+ * Run `seedSampleRegistry()` from the Apps Script editor to populate the Registry sheet.
+ */
+function seedSampleRegistry() {
+  const sample = [
+    { id: 't1', name: 'Alice Kumar', email: 'alice.k@example.com', whatsapp: '', assignedClasses: ['5A'], isClassTeacher: false },
+    { id: 't2', name: 'Rahul Singh', email: 'rahul.s@example.com', whatsapp: '', assignedClasses: ['6B'], isClassTeacher: true }
+  ];
+  const res = runInitialSyncManual(sample);
+  Logger.log('seedSampleRegistry result: ' + JSON.stringify(res));
+  return res;
+}
+
+/**
+ * Install the provided DEFAULT_TEACHERS_JSON into Script Properties
+ * and run the initial sync. Run `installDefaultTeachers()` from the
+ * Apps Script editor to populate your Registry automatically.
+ */
+function installDefaultTeachers() {
+  const json = {"teachers":[{"id":"kishor-kunal","email":"kunal2959@gmail.com","name":"Kishor Kunal","whatsapp":"9852963971","isClassTeacher":{"classLevel":"V","section":"A"},"assignedClasses":[{"classLevel":"VI","section":"A","subject":"Computer"},{"classLevel":"VI","section":"B","subject":"Computer"},{"classLevel":"VI","section":"C","subject":"Computer"},{"classLevel":"VI","section":"D","subject":"Computer"},{"classLevel":"V","section":"A","subject":"Computer"},{"classLevel":"V","section":"B","subject":"Computer"},{"classLevel":"V","section":"C","subject":"Computer"}]},{"id":"jude-godwin","email":"frankgodwin416@gmail.com","name":"Jude Godwin","whatsapp":"8340203221","isClassTeacher":{"classLevel":"VI","section":"A"},"assignedClasses":[{"classLevel":"VI","section":"A","subject":"English"},{"classLevel":"VI","section":"B","subject":"English"},{"classLevel":"V","section":"A","subject":"English"},{"classLevel":"V","section":"B","subject":"English"},{"classLevel":"V","section":"C","subject":"English"}]},{"id":"rajni-bala","email":"nancyrajni1510@gmail.com","name":"Rajni Bala","whatsapp":"8709648302","isClassTeacher":{"classLevel":"VII","section":"A"},"assignedClasses":[{"classLevel":"VI","section":"C","subject":"English"},{"classLevel":"VII","section":"A","subject":"English"},{"classLevel":"VII","section":"B","subject":"English"},{"classLevel":"VII","section":"C","subject":"English"},{"classLevel":"VII","section":"D","subject":"English"}]},{"id":"rahul-kumar","email":"rahul.kkq@gmail.com","name":"Rahul Kumar","whatsapp":"8340370475","isClassTeacher":{"classLevel":"VI","section":"D"},"assignedClasses":[{"classLevel":"VI","section":"D","subject":"English"},{"classLevel":"VI","section":"A","subject":"Social Science"},{"classLevel":"VI","section":"B","subject":"Social Science"},{"classLevel":"VI","section":"C","subject":"Social Science"},{"classLevel":"VI","section":"D","subject":"Social Science"}]},{"id":"renu-kumari","email":"69191@sacredheartkoderma.org","name":"Renu Kumari","whatsapp":"8340227030","isClassTeacher":{"classLevel":"V","section":"C"},"assignedClasses":[{"classLevel":"VI","section":"A","subject":"Hindi"},{"classLevel":"VI","section":"B","subject":"Hindi"},{"classLevel":"V","section":"A","subject":"Hindi"},{"classLevel":"V","section":"B","subject":"Hindi"},{"classLevel":"V","section":"C","subject":"Hindi"}]},{"id":"manoj-singh","email":"ms3020998@gmail.com","name":"Manoj Kumar Singh","whatsapp":"7739566755","isClassTeacher":{"classLevel":"VI","section":"C"},"assignedClasses":[{"classLevel":"VI","section":"C","subject":"Hindi"},{"classLevel":"VI","section":"D","subject":"Hindi"},{"classLevel":"VII","section":"A","subject":"Hindi"},{"classLevel":"VII","section":"B","subject":"Hindi"},{"classLevel":"VII","section":"C","subject":"Hindi"},{"classLevel":"VII","section":"D","subject":"Hindi"}]},{"id":"ramesh-kunj","email":"rameshkunj6311@gmail.com","name":"Ramesh Kunj","whatsapp":"6202915575","assignedClasses":[{"classLevel":"VI","section":"A","subject":"Mathematics"},{"classLevel":"VI","section":"B","subject":"Mathematics"},{"classLevel":"VI","section":"D","subject":"Mathematics"}]},{"id":"radha-singh","email":"radhasingh1223@gmail.com","name":"Radha Singh","whatsapp":"8709081170","isClassTeacher":{"classLevel":"V","section":"B"},"assignedClasses":[{"classLevel":"VI","section":"C","subject":"Mathematics"},{"classLevel":"V","section":"A","subject":"EVS"},{"classLevel":"V","section":"B","subject":"EVS"},{"classLevel":"V","section":"C","subject":"EVS"}]},{"id":"sumit-shaw","email":"10674690@cbsedigitaledu.in","name":"Sumit Shaw","whatsapp":"7908682112","isClassTeacher":{"classLevel":"VII","section":"B"},"assignedClasses":[{"classLevel":"VI","section":"A","subject":"Science"},{"classLevel":"VI","section":"B","subject":"Science"},{"classLevel":"VI","section":"C","subject":"Science"},{"classLevel":"VI","section":"D","subject":"Science"},{"classLevel":"VII","section":"A","subject":"Science"},{"classLevel":"VII","section":"B","subject":"Science"}]},{"id":"sanjay-kumar","email":"sanjaykumar.shs@gmail.com","name":"Sanjay Kumar","whatsapp":"9204434436","assignedClasses":[{"classLevel":"VI","section":"A","subject":"Sanskrit"},{"classLevel":"VI","section":"B","subject":"Sanskrit"},{"classLevel":"VI","section":"C","subject":"Sanskrit"},{"classLevel":"VI","section":"D","subject":"Sanskrit"},{"classLevel":"V","section":"A","subject":"Sanskrit"},{"classLevel":"V","section":"B","subject":"Sanskrit"},{"classLevel":"V","section":"C","subject":"Sanskrit"},{"classLevel":"VII","section":"A","subject":"Sanskrit"},{"classLevel":"VII","section":"B","subject":"Sanskrit"},{"classLevel":"VII","section":"C","subject":"Sanskrit"},{"classLevel":"VII","section":"D","subject":"Sanskrit"}]},{"id":"neha-kumari","email":"nehajmt81@gmail.com","name":"Neha Kumari","whatsapp":"7667260558","isClassTeacher":{"classLevel":"VI","section":"B"},"assignedClasses":[{"classLevel":"V","section":"A","subject":"Mathematics"},{"classLevel":"V","section":"B","subject":"Mathematics"},{"classLevel":"V","section":"C","subject":"Mathematics"}]},{"id":"ashutosh-gautam","email":"gautam663@gmail.com","name":"Ashutosh Kumar Gautam","whatsapp":"7004743875","assignedClasses":[{"classLevel":"VII","section":"A","subject":"Computer"},{"classLevel":"VII","section":"B","subject":"Computer"},{"classLevel":"VII","section":"C","subject":"Computer"},{"classLevel":"VII","section":"D","subject":"Computer"}]},{"id":"sujeet-pratap","email":"sujeetpratapsingh65908@gmail.com","name":"Sujeet Pratap Singh","whatsapp":"7667892143","isClassTeacher":{"classLevel":"VII","section":"D"},"assignedClasses":[{"classLevel":"VII","section":"A","subject":"Mathematics"},{"classLevel":"VII","section":"B","subject":"Mathematics"},{"classLevel":"VII","section":"C","subject":"Mathematics"},{"classLevel":"VII","section":"D","subject":"Mathematics"},{"classLevel":"VII","section":"C","subject":"Science"},{"classLevel":"VII","section":"D","subject":"Science"}]},{"id":"anmol-ratan","email":"anmolratan80@gmail.com","name":"Anmol Ratan","whatsapp":"7091203535","isClassTeacher":{"classLevel":"VII","section":"C"},"assignedClasses":[{"classLevel":"VII","section":"A","subject":"Social Science"},{"classLevel":"VII","section":"B","subject":"Social Science"},{"classLevel":"VII","section":"C","subject":"Social Science"},{"classLevel":"VII","section":"D","subject":"Social Science"}]}]};
+  try {
+    PropertiesService.getScriptProperties().setProperty('DEFAULT_TEACHERS_JSON', JSON.stringify(json));
+    return runInitialSyncFromScriptProperty();
+  } catch (e) {
+    return jsonResponse('error', 'installDefaultTeachers failed: ' + e.message);
   }
 }
