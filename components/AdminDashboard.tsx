@@ -532,14 +532,28 @@ const TeacherFormModal: React.FC<{
                   <select
                     className="flex-1 px-4 py-3 rounded-2xl bg-white border border-gray-100 outline-none font-bold"
                     value={formData.isClassTeacher?.classLevel || ALL_CLASSES[0]}
-                    onChange={e => setFormData({...formData, isClassTeacher: { ...(formData.isClassTeacher || {} as any), classLevel: e.target.value as ClassLevel }})}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      // create a fresh isClassTeacher object with explicit fields to avoid TS inference issues
+                      isClassTeacher: {
+                        classLevel: e.target.value as ClassLevel,
+                        section: (prev.isClassTeacher?.section as Section) || ALL_SECTIONS[0]
+                      }
+                    }))}
                   >
                     {ALL_CLASSES.map(c => <option key={c} value={c}>Class {c}</option>)}
                   </select>
                   <select
                     className="w-32 px-4 py-3 rounded-2xl bg-white border border-gray-100 outline-none font-bold"
                     value={formData.isClassTeacher?.section || ALL_SECTIONS[0]}
-                    onChange={e => setFormData({...formData, isClassTeacher: { ...(formData.isClassTeacher || {} as any), section: e.target.value as Section }})}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      // create a fresh isClassTeacher object with explicit fields to avoid TS inference issues
+                      isClassTeacher: {
+                        classLevel: (prev.isClassTeacher?.classLevel as ClassLevel) || ALL_CLASSES[0],
+                        section: e.target.value as Section
+                      }
+                    }))}
                   >
                     {ALL_SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
