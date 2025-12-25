@@ -489,7 +489,8 @@ const TeacherFormModal: React.FC<{
       email: formData.email!,
       whatsapp: formData.whatsapp,
       assignedClasses: formData.assignedClasses || [],
-      isClassTeacher: isCT ? (formData.isClassTeacher || { classLevel: (formData.isClassTeacher?.classLevel || newAssignment.classLevel) as ClassLevel, section: (formData.isClassTeacher?.section || newAssignment.section) as Section }) : undefined,
+      // ensure isClassTeacher has subject (AssignedClass requires subject)
+      isClassTeacher: isCT ? (formData.isClassTeacher || { classLevel: (formData.isClassTeacher?.classLevel || newAssignment.classLevel) as ClassLevel, section: (formData.isClassTeacher?.section || newAssignment.section) as Section, subject: formData.isClassTeacher?.subject || newAssignment.subject || '' }) : undefined,
     } as Teacher;
 
     onSave(teacherObj);
@@ -522,7 +523,7 @@ const TeacherFormModal: React.FC<{
                     setIsCT(true);
                     setFormData(prev => ({
                       ...prev,
-                      isClassTeacher: prev.isClassTeacher || { classLevel: ALL_CLASSES[0] as ClassLevel, section: ALL_SECTIONS[0] as Section }
+                      isClassTeacher: prev.isClassTeacher || { classLevel: ALL_CLASSES[0] as ClassLevel, section: ALL_SECTIONS[0] as Section, subject: prev.isClassTeacher?.subject || '' }
                     }));
                   }} className="mr-2" />
                   Yes
@@ -545,14 +546,16 @@ const TeacherFormModal: React.FC<{
                     className="flex-1 px-4 py-3 rounded-2xl bg-white border border-gray-100 outline-none font-bold"
                     value={formData.isClassTeacher?.classLevel || ALL_CLASSES[0]}
                     onChange={e => setFormData(prev => {
-                      // compute safely from prev to avoid 'never' inference
+                      // compute safely from prev to avoid 'never' inference and ensure subject exists
                       const prevCT = prev.isClassTeacher as AssignedClass | undefined;
                       const newSection: Section = (prevCT && prevCT.section) ? prevCT.section : ALL_SECTIONS[0];
+                      const newSubject = (prevCT && prevCT.subject) ? prevCT.subject : '';
                       return {
                         ...prev,
                         isClassTeacher: {
                           classLevel: e.target.value as ClassLevel,
-                          section: newSection
+                          section: newSection,
+                          subject: newSubject
                         }
                       };
                     })}
@@ -563,14 +566,16 @@ const TeacherFormModal: React.FC<{
                     className="w-32 px-4 py-3 rounded-2xl bg-white border border-gray-100 outline-none font-bold"
                     value={formData.isClassTeacher?.section || ALL_SECTIONS[0]}
                     onChange={e => setFormData(prev => {
-                      // compute safely from prev to avoid 'never' inference
+                      // compute safely from prev to avoid 'never' inference and ensure subject exists
                       const prevCT = prev.isClassTeacher as AssignedClass | undefined;
                       const newClassLevel: ClassLevel = (prevCT && prevCT.classLevel) ? prevCT.classLevel : ALL_CLASSES[0];
+                      const newSubject = (prevCT && prevCT.subject) ? prevCT.subject : '';
                       return {
                         ...prev,
                         isClassTeacher: {
                           classLevel: newClassLevel,
-                          section: e.target.value as Section
+                          section: e.target.value as Section,
+                          subject: newSubject
                         }
                       };
                     })}
