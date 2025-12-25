@@ -438,7 +438,8 @@ const TeacherFormModal: React.FC<{
   onClose: () => void;
   onSave: (data: Teacher) => void;
 }> = ({ teacher, onClose, onSave }) => {
-  const [formData, setFormData] = useState<Partial<Teacher>>({
+  // Tighten formData type to include isClassTeacher explicitly to avoid TS "never" inference
+  const [formData, setFormData] = useState<Partial<Teacher> & { isClassTeacher?: AssignedClass }>({
     name: teacher?.name || '',
     email: teacher?.email || '',
     whatsapp: teacher?.whatsapp || '',
@@ -448,8 +449,8 @@ const TeacherFormModal: React.FC<{
 
   // For adding a new single assignment quickly (Teaching Class & Section requested fields)
   const [newAssignment, setNewAssignment] = useState<AssignedClass>({
-    classLevel: ALL_CLASSES[0] as ClassLevel || 'I',
-    section: ALL_SECTIONS[0] as Section || 'A',
+    classLevel: (ALL_CLASSES[0] as ClassLevel) || 'I',
+    section: (ALL_SECTIONS[0] as Section) || 'A',
     subject: '',
   });
 
@@ -461,7 +462,9 @@ const TeacherFormModal: React.FC<{
   }, [teacher]);
 
   const handleAddAssignment = () => {
-    if (!newAssignment.subject) return;
+    if (!newAssignment.subject) {
+      // allow adding assignment without subject if desired, but still push it
+    }
     setFormData(prev => ({
       ...prev,
       assignedClasses: [...(prev.assignedClasses || []), { ...newAssignment }]
@@ -482,8 +485,8 @@ const TeacherFormModal: React.FC<{
 
     const teacherObj: Teacher = {
       id: teacher?.id || `teacher_${Date.now()}`,
-      name: formData.name,
-      email: formData.email,
+      name: formData.name!,
+      email: formData.email!,
       whatsapp: formData.whatsapp,
       assignedClasses: formData.assignedClasses || [],
       isClassTeacher: isCT ? (formData.isClassTeacher || { classLevel: (formData.isClassTeacher?.classLevel || newAssignment.classLevel) as ClassLevel, section: (formData.isClassTeacher?.section || newAssignment.section) as Section }) : undefined,
@@ -515,11 +518,20 @@ const TeacherFormModal: React.FC<{
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Is Class Teacher?</label>
               <div className="flex gap-4 items-center">
                 <label className={`px-4 py-3 rounded-2xl border ${isCT ? 'bg-emerald-50 border-emerald-200' : 'bg-white'} cursor-pointer`}>
-                  <input type="radio" name="isCT" checked={isCT} onChange={() => { setIsCT(true); setFormData(prev => ({...prev, isClassTeacher: prev.isClassTeacher || { classLevel: ALL_CLASSES[0] as ClassLevel, section: ALL_SECTIONS[0] as Section } })) }} className="mr-2" />
+                  <input type="radio" name="isCT" checked={isCT} onChange={() => {
+                    setIsCT(true);
+                    setFormData(prev => ({
+                      ...prev,
+                      isClassTeacher: prev.isClassTeacher || { classLevel: ALL_CLASSES[0] as ClassLevel, section: ALL_SECTIONS[0] as Section }
+                    }));
+                  }} className="mr-2" />
                   Yes
                 </label>
                 <label className={`px-4 py-3 rounded-2xl border ${!isCT ? 'bg-red-50 border-red-200' : 'bg-white'} cursor-pointer`}>
-                  <input type="radio" name="isCT" checked={!isCT} onChange={() => { setIsCT(false); setFormData(prev => ({...prev, isClassTeacher: undefined })) }} className="mr-2" />
+                  <input type="radio" name="isCT" checked={!isCT} onChange={() => {
+                    setIsCT(false);
+                    setFormData(prev => ({ ...prev, isClassTeacher: undefined }));
+                  }} className="mr-2" />
                   No
                 </label>
               </div>
@@ -575,7 +587,7 @@ const TeacherFormModal: React.FC<{
                 required type="text" 
                 className="w-full px-6 py-4 rounded-2xl bg-gray-50 border border-gray-100 outline-none font-bold" 
                 value={formData.name} 
-                onChange={e => setFormData({...formData, name: e.target.value})} 
+                onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} 
               />
             </div>
 
@@ -585,7 +597,7 @@ const TeacherFormModal: React.FC<{
               <select
                 className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-100 outline-none font-bold"
                 value={newAssignment.classLevel}
-                onChange={e => setNewAssignment({...newAssignment, classLevel: e.target.value as ClassLevel})}
+                onChange={e => setNewAssignment(prev => ({ ...prev, classLevel: e.target.value as ClassLevel }))}
               >
                 {ALL_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -596,7 +608,7 @@ const TeacherFormModal: React.FC<{
               <select
                 className="w-full px-4 py-3 rounded-2xl bg-white border border-gray-100 outline-none font-bold"
                 value={newAssignment.section}
-                onChange={e => setNewAssignment({...newAssignment, section: e.target.value as Section})}
+                onChange={e => setNewAssignment(prev => ({ ...prev, section: e.target.value as Section }))}
               >
                 {ALL_SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -609,7 +621,7 @@ const TeacherFormModal: React.FC<{
                 placeholder="e.g. Mathematics" 
                 className="w-full px-6 py-3 rounded-xl bg-white border border-gray-100 outline-none font-bold" 
                 value={newAssignment.subject} 
-                onChange={e => setNewAssignment({...newAssignment, subject: e.target.value})}
+                onChange={e => setNewAssignment(prev => ({ ...prev, subject: e.target.value }))}
               />
             </div>
 
@@ -619,7 +631,7 @@ const TeacherFormModal: React.FC<{
                 type="tel" 
                 className="w-full px-6 py-4 rounded-2xl bg-gray-50 border border-gray-100 outline-none font-bold" 
                 value={formData.whatsapp} 
-                onChange={e => setFormData({...formData, whatsapp: e.target.value})} 
+                onChange={e => setFormData(prev => ({ ...prev, whatsapp: e.target.value }))} 
                 placeholder="91XXXXXXXXXX"
               />
             </div>
@@ -630,7 +642,7 @@ const TeacherFormModal: React.FC<{
                 required type="email" 
                 className="w-full px-6 py-4 rounded-2xl bg-gray-50 border border-gray-100 outline-none font-bold" 
                 value={formData.email} 
-                onChange={e => setFormData({...formData, email: e.target.value})} 
+                onChange={e => setFormData(prev => ({ ...prev, email: e.target.value }))} 
               />
             </div>
           </div>
@@ -642,18 +654,7 @@ const TeacherFormModal: React.FC<{
               <div className="flex items-center gap-3">
                 <button 
                   type="button"
-                  onClick={() => {
-                    // if primary subject present, add primary assignment
-                    if (!newAssignment.subject) {
-                      // if no subject provided, still allow assignment without subject
-                      // but only if at least class and section are provided
-                    }
-                    setFormData(prev => ({
-                      ...prev,
-                      assignedClasses: [...(prev.assignedClasses || []), { ...newAssignment }]
-                    }));
-                    setNewAssignment({ ...newAssignment, subject: '' });
-                  }}
+                  onClick={handleAddAssignment}
                   className="bg-blue-600 text-white px-4 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-sm"
                 >
                   Add Primary Assignment
