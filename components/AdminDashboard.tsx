@@ -438,13 +438,15 @@ const TeacherFormModal: React.FC<{
   onClose: () => void;
   onSave: (data: Teacher) => void;
 }> = ({ teacher, onClose, onSave }) => {
-  // Tighten formData type to include isClassTeacher explicitly to avoid TS "never" inference
-  const [formData, setFormData] = useState<Partial<Teacher> & { isClassTeacher?: AssignedClass }>({
+  // Tighten formData type to include isClassTeacher explicitly
+  const [formData, setFormData] = useState<Omit<Partial<Teacher>, 'isClassTeacher'> & { 
+    isClassTeacher?: AssignedClass 
+  }>({
     name: teacher?.name || '',
     email: teacher?.email || '',
     whatsapp: teacher?.whatsapp || '',
     assignedClasses: teacher?.assignedClasses || [],
-    isClassTeacher: teacher?.isClassTeacher || undefined,
+    isClassTeacher: teacher?.isClassTeacher,
   });
 
   // For adding a new single assignment quickly (Teaching Class & Section requested fields)
@@ -489,8 +491,12 @@ const TeacherFormModal: React.FC<{
       email: formData.email!,
       whatsapp: formData.whatsapp,
       assignedClasses: formData.assignedClasses || [],
-      // ensure isClassTeacher has subject (AssignedClass requires subject)
-      isClassTeacher: isCT ? (formData.isClassTeacher || { classLevel: (formData.isClassTeacher?.classLevel || newAssignment.classLevel) as ClassLevel, section: (formData.isClassTeacher?.section || newAssignment.section) as Section, subject: formData.isClassTeacher?.subject || newAssignment.subject || '' }) : undefined,
+      // Ensure isClassTeacher has subject (AssignedClass requires subject)
+      isClassTeacher: isCT ? (formData.isClassTeacher || { 
+        classLevel: newAssignment.classLevel, 
+        section: newAssignment.section, 
+        subject: newAssignment.subject || 'General' 
+      }) : undefined,
     } as Teacher;
 
     onSave(teacherObj);
@@ -519,20 +525,36 @@ const TeacherFormModal: React.FC<{
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Is Class Teacher?</label>
               <div className="flex gap-4 items-center">
                 <label className={`px-4 py-3 rounded-2xl border ${isCT ? 'bg-emerald-50 border-emerald-200' : 'bg-white'} cursor-pointer`}>
-                  <input type="radio" name="isCT" checked={isCT} onChange={() => {
-                    setIsCT(true);
-                    setFormData(prev => ({
-                      ...prev,
-                      isClassTeacher: prev.isClassTeacher || { classLevel: ALL_CLASSES[0] as ClassLevel, section: ALL_SECTIONS[0] as Section, subject: prev.isClassTeacher?.subject || '' }
-                    }));
-                  }} className="mr-2" />
+                  <input 
+                    type="radio" 
+                    name="isCT" 
+                    checked={isCT} 
+                    onChange={() => {
+                      setIsCT(true);
+                      setFormData(prev => ({
+                        ...prev,
+                        isClassTeacher: prev.isClassTeacher || { 
+                          classLevel: ALL_CLASSES[0] as ClassLevel, 
+                          section: ALL_SECTIONS[0] as Section, 
+                          subject: '' 
+                        }
+                      }));
+                    }} 
+                    className="mr-2" 
+                  />
                   Yes
                 </label>
                 <label className={`px-4 py-3 rounded-2xl border ${!isCT ? 'bg-red-50 border-red-200' : 'bg-white'} cursor-pointer`}>
-                  <input type="radio" name="isCT" checked={!isCT} onChange={() => {
-                    setIsCT(false);
-                    setFormData(prev => ({ ...prev, isClassTeacher: undefined }));
-                  }} className="mr-2" />
+                  <input 
+                    type="radio" 
+                    name="isCT" 
+                    checked={!isCT} 
+                    onChange={() => {
+                      setIsCT(false);
+                      setFormData(prev => ({ ...prev, isClassTeacher: undefined }));
+                    }} 
+                    className="mr-2" 
+                  />
                   No
                 </label>
               </div>
@@ -546,16 +568,13 @@ const TeacherFormModal: React.FC<{
                     className="flex-1 px-4 py-3 rounded-2xl bg-white border border-gray-100 outline-none font-bold"
                     value={formData.isClassTeacher?.classLevel || ALL_CLASSES[0]}
                     onChange={e => setFormData(prev => {
-                      // compute safely from prev to avoid 'never' inference and ensure subject exists
-                      const prevCT = prev.isClassTeacher as AssignedClass | undefined;
-                      const newSection: Section = (prevCT && prevCT.section) ? prevCT.section : ALL_SECTIONS[0];
-                      const newSubject = (prevCT && prevCT.subject) ? prevCT.subject : '';
+                      const prevCT = prev.isClassTeacher;
                       return {
                         ...prev,
                         isClassTeacher: {
                           classLevel: e.target.value as ClassLevel,
-                          section: newSection,
-                          subject: newSubject
+                          section: prevCT?.section || ALL_SECTIONS[0],
+                          subject: prevCT?.subject || ''
                         }
                       };
                     })}
@@ -566,16 +585,13 @@ const TeacherFormModal: React.FC<{
                     className="w-32 px-4 py-3 rounded-2xl bg-white border border-gray-100 outline-none font-bold"
                     value={formData.isClassTeacher?.section || ALL_SECTIONS[0]}
                     onChange={e => setFormData(prev => {
-                      // compute safely from prev to avoid 'never' inference and ensure subject exists
-                      const prevCT = prev.isClassTeacher as AssignedClass | undefined;
-                      const newClassLevel: ClassLevel = (prevCT && prevCT.classLevel) ? prevCT.classLevel : ALL_CLASSES[0];
-                      const newSubject = (prevCT && prevCT.subject) ? prevCT.subject : '';
+                      const prevCT = prev.isClassTeacher;
                       return {
                         ...prev,
                         isClassTeacher: {
-                          classLevel: newClassLevel,
+                          classLevel: prevCT?.classLevel || ALL_CLASSES[0],
                           section: e.target.value as Section,
-                          subject: newSubject
+                          subject: prevCT?.subject || ''
                         }
                       };
                     })}
@@ -589,7 +605,8 @@ const TeacherFormModal: React.FC<{
             <div className="space-y-2 md:col-span-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Full Name</label>
               <input 
-                required type="text" 
+                required 
+                type="text" 
                 className="w-full px-6 py-4 rounded-2xl bg-gray-50 border border-gray-100 outline-none font-bold" 
                 value={formData.name} 
                 onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} 
@@ -644,7 +661,8 @@ const TeacherFormModal: React.FC<{
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Official Email</label>
               <input 
-                required type="email" 
+                required 
+                type="email" 
                 className="w-full px-6 py-4 rounded-2xl bg-gray-50 border border-gray-100 outline-none font-bold" 
                 value={formData.email} 
                 onChange={e => setFormData(prev => ({ ...prev, email: e.target.value }))} 
