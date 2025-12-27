@@ -40,7 +40,18 @@ const App: React.FC = () => {
     if (!url || !url.startsWith('http')) return false;
     try {
       const fetchUrl = url.includes('?') ? `${url}&t=${Date.now()}` : `${url}?t=${Date.now()}`;
-      const response = await fetch(fetchUrl, { redirect: 'follow' }); 
+      const response = await fetch(fetchUrl, { 
+        redirect: 'follow',
+        cache: 'no-store'  // Add this to prevent caching
+      }); 
+      
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error("Cloud returned non-JSON response");
+        return false;
+      }
+      
       const data = await response.json();
       
       if (data.result === 'success') {
@@ -85,11 +96,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const initialize = async () => {
       try {
-        const savedTeachers = localStorage.getItem('sh_teachers_v4');
-        const savedSubmissions = localStorage.getItem('sh_submissions_v2');
-        const savedRequests = localStorage.getItem('sh_resubmit_requests');
-        const savedUser = sessionStorage.getItem('sh_user');
-        
         const params = new URLSearchParams(window.location.search);
         let activeSyncUrl = params.get('sync') || localStorage.getItem('sh_sync_url') || DEFAULT_SYNC_URL;
         
@@ -97,6 +103,17 @@ const App: React.FC = () => {
         syncUrlRef.current = activeSyncUrl;
         localStorage.setItem('sh_sync_url', activeSyncUrl);
 
+        // CRITICAL FIX: Fetch from cloud FIRST before loading local storage
+        let cloudDataLoaded = false;
+        if (activeSyncUrl) {
+          cloudDataLoaded = await fetchRegistryFromCloud(activeSyncUrl);
+        }
+
+        const savedTeachers = localStorage.getItem('sh_teachers_v4');
+        const savedSubmissions = localStorage.getItem('sh_submissions_v2');
+        const savedRequests = localStorage.getItem('sh_resubmit_requests');
+        const savedUser = sessionStorage.getItem('sh_user');
+        
         // Load user first
         if (savedUser) {
           try { 
@@ -106,23 +123,31 @@ const App: React.FC = () => {
           }
         }
 
-        // Load from local storage first (fallback)
-        if (savedTeachers) {
-          const t = JSON.parse(savedTeachers);
-          setTeachers(t);
-          teachersRef.current = t;
-        } else {
-          setTeachers(INITIAL_TEACHERS);
-          teachersRef.current = INITIAL_TEACHERS;
+        // Load from local storage only if cloud fetch failed or returned empty
+        if (!cloudDataLoaded) {
+          if (savedTeachers) {
+            const t = JSON.parse(savedTeachers);
+            setTeachers(t);
+            teachersRef.current = t;
+          } else {
+            setTeachers(INITIAL_TEACHERS);
+            teachersRef.current = INITIAL_TEACHERS;
+          }
+          
+          if (savedSubmissions) {
+            setSubmissions(JSON.parse(savedSubmissions));
+          }
+          
+          if (savedRequests) {
+            setResubmitRequests(JSON.parse(savedRequests));
+          }
         }
         
-        setSubmissions(savedSubmissions ? JSON.parse(savedSubmissions) : []);
-        setResubmitRequests(savedRequests ? JSON.parse(savedRequests) : []);
-
-        // Then try to sync with cloud
+        // Final sync to ensure everything is up-to-date
         if (activeSyncUrl) {
-          await fetchRegistryFromCloud(activeSyncUrl);
+          setTimeout(() => fetchRegistryFromCloud(activeSyncUrl), 500);
         }
+        
       } finally {
         setIsInitializing(false);
       }
