@@ -7,9 +7,16 @@ interface Props {
   teachers: Teacher[];
   onSyncRegistry: (url: string) => Promise<boolean>;
   syncUrl: string;
+  isDataReady?: boolean; // Added this line
 }
 
-const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) => {
+const Login: React.FC<Props> = ({ 
+  onLogin, 
+  teachers, 
+  onSyncRegistry, 
+  syncUrl,
+  isDataReady = true // Default to true if not provided
+}) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -42,6 +49,13 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Prevent login if data is not ready
+    if (!isDataReady) {
+      setError('System is initializing. Please wait...');
+      return;
+    }
+    
     setError('');
     const cleanEmail = email.trim().toLowerCase();
 
@@ -85,6 +99,9 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
       }
     }
   };
+
+  // Determine if the form should be disabled
+  const isFormDisabled = isVerifying || !isDataReady;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 md:p-8 relative overflow-hidden">
@@ -142,11 +159,12 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
                 <button
                   type="button"
                   onClick={() => setActiveButton('teacher')}
+                  disabled={isFormDisabled}
                   className={`flex-1 py-3 px-4 md:py-4 md:px-6 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 ${
                     activeButton === 'teacher'
                       ? 'bg-white text-blue-700 shadow-lg shadow-white/20'
-                      : 'bg-white/10 text-white/90 hover:bg-white/20'
-                  }`}
+                      : 'bg-white/10 text-white/90 hover:bg-white/20 disabled:hover:bg-white/10 disabled:opacity-50'
+                  } ${isFormDisabled ? 'cursor-not-allowed' : ''}`}
                 >
                   <i className={`fas ${activeButton === 'teacher' ? 'fa-chalkboard-teacher' : 'fa-user-tie'} text-sm md:text-base`}></i>
                   <span className="text-xs md:text-sm font-bold">Teacher Login</span>
@@ -155,11 +173,12 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
                 <button
                   type="button"
                   onClick={() => setActiveButton('admin')}
+                  disabled={isFormDisabled}
                   className={`flex-1 py-3 px-4 md:py-4 md:px-6 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 ${
                     activeButton === 'admin'
                       ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
-                      : 'bg-white/10 text-white/90 hover:bg-white/20'
-                  }`}
+                      : 'bg-white/10 text-white/90 hover:bg-white/20 disabled:hover:bg-white/10 disabled:opacity-50'
+                  } ${isFormDisabled ? 'cursor-not-allowed' : ''}`}
                 >
                   <i className={`fas ${activeButton === 'admin' ? 'fa-shield-alt' : 'fa-user-shield'} text-sm md:text-base`}></i>
                   <span className="text-xs md:text-sm font-bold">Admin Login</span>
@@ -167,8 +186,17 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
               </div>
               
               <div className="flex items-center justify-center gap-2 text-xs">
-                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
-                <span className="font-medium text-xs">Live Cloud Sync Active</span>
+                {isDataReady ? (
+                  <>
+                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+                    <span className="font-medium text-xs">Live Cloud Sync Active</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
+                    <span className="font-medium text-xs">Initializing System...</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -205,7 +233,7 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
                     <input
                       type="email"
                       required
-                      disabled={isVerifying}
+                      disabled={isFormDisabled}
                       className="w-full pl-12 md:pl-14 pr-4 md:pr-6 py-3 md:py-4 rounded-2xl border-2 border-gray-100 bg-white/50 focus:bg-white focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-semibold text-gray-700 placeholder-gray-400 disabled:opacity-50 text-sm md:text-base"
                       placeholder={activeButton === 'teacher' ? "teacher@sacredheartkoderma.org" : "admin@sacredheartkoderma.org"}
                       value={email}
@@ -235,7 +263,8 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
                       <input
                         type={showPassword ? "text" : "password"}
                         required
-                        className="w-full pl-12 md:pl-14 pr-12 md:pr-14 py-3 md:py-4 rounded-2xl border-2 border-gray-100 bg-white/50 focus:bg-white focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-all font-semibold text-gray-700 placeholder-gray-400 text-sm md:text-base"
+                        disabled={isFormDisabled}
+                        className="w-full pl-12 md:pl-14 pr-12 md:pr-14 py-3 md:py-4 rounded-2xl border-2 border-gray-100 bg-white/50 focus:bg-white focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-all font-semibold text-gray-700 placeholder-gray-400 disabled:opacity-50 text-sm md:text-base"
                         placeholder="••••••••••"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
@@ -245,7 +274,8 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 md:right-4 text-gray-400 hover:text-purple-600 transition-colors"
+                        disabled={isFormDisabled}
+                        className="absolute right-3 md:right-4 text-gray-400 hover:text-purple-600 transition-colors disabled:opacity-50 disabled:hover:text-gray-400"
                       >
                         <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-sm`}></i>
                       </button>
@@ -258,8 +288,8 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
             {/* Submit button */}
             <button
               type="submit"
-              disabled={isVerifying}
-              className="group relative w-full py-4 md:py-5 px-6 md:px-8 rounded-2xl shadow-xl transform transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+              disabled={isFormDisabled}
+              className="group relative w-full py-4 md:py-5 px-6 md:px-8 rounded-2xl shadow-xl transform transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden"
             >
               {/* Animated background */}
               <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 group-hover:from-blue-700 group-hover:via-indigo-700 group-hover:to-purple-800 transition-all"></div>
@@ -272,6 +302,13 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
                     <div className="w-5 h-5 md:w-6 md:h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                     <span className="font-bold md:font-black text-white text-sm md:text-base tracking-wide">
                       Verifying with Cloud...
+                    </span>
+                  </>
+                ) : !isDataReady ? (
+                  <>
+                    <div className="w-5 h-5 md:w-6 md:h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span className="font-bold md:font-black text-white text-sm md:text-base tracking-wide">
+                      Initializing System...
                     </span>
                   </>
                 ) : (
@@ -307,8 +344,17 @@ const Login: React.FC<Props> = ({ onLogin, teachers, onSyncRegistry, syncUrl }) 
         <div className="mt-6 md:mt-8 text-center">
           <p className="text-xs text-gray-500 font-medium">
             <span className="inline-block px-3 py-1.5 md:py-1 rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 text-xs">
-              <i className="fas fa-cloud-arrow-up mr-1"></i>
-              Real-time sync with school database
+              {isDataReady ? (
+                <>
+                  <i className="fas fa-cloud-arrow-up mr-1"></i>
+                  Real-time sync with school database
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-spinner fa-spin mr-1"></i>
+                  Loading system data...
+                </>
+              )}
             </span>
           </p>
         </div>
