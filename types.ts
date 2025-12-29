@@ -56,12 +56,24 @@ export interface ClassTeacherInfo {
   section: Section;
 }
 
+// export interface ResubmitRequest {
+//   id: string;
+//   teacherId: string;
+//   teacherName: string;
+//   teacherEmail: string;
+//   weekStarting: string;
+//   timestamp: string;
+//   status: 'pending' | 'approved';
+// }
 export interface ResubmitRequest {
   id: string;
   teacherId: string;
   teacherName: string;
   teacherEmail: string;
   weekStarting: string;
-  timestamp: string;
-  status: 'pending' | 'approved';
+  status: 'pending' | 'approved' | 'declined';
+  requestedAt: Date;
+  // Add these if you want to track email status
+  teacherNotified?: boolean;
+  adminNotified?: boolean;
 }
