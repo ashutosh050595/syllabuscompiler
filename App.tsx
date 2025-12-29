@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [showNotification, setShowNotification] = useState(true);
+  const [isDataReady, setIsDataReady] = useState(false); // NEW: Track when data is ready
   
   const teachersRef = useRef<Teacher[]>([]);
   const syncUrlRef = useRef<string>('');
@@ -42,24 +43,31 @@ const App: React.FC = () => {
       const fetchUrl = url.includes('?') ? `${url}&t=${Date.now()}` : `${url}?t=${Date.now()}`;
       const response = await fetch(fetchUrl, { 
         redirect: 'follow',
-        cache: 'no-store'  // Add this to prevent caching
+        cache: 'no-store'
       }); 
       
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        console.error("Cloud returned non-JSON response");
+        console.error("Cloud returned non-JSON response:", await response.text());
         return false;
       }
       
       const data = await response.json();
       
       if (data.result === 'success') {
-        // PROTECTION: Only overwrite if cloud has actual data, otherwise keep existing
-        if (data.teachers && Array.isArray(data.teachers) && data.teachers.length > 0) {
+        console.log("Cloud data received:", {
+          teachers: data.teachers?.length || 0,
+          submissions: data.submissions?.length || 0,
+          requests: data.requests?.length || 0
+        });
+
+        // ALWAYS update from cloud - cloud is source of truth
+        if (data.teachers && Array.isArray(data.teachers)) {
           setTeachers(data.teachers);
           teachersRef.current = data.teachers;
           localStorage.setItem('sh_teachers_v4', JSON.stringify(data.teachers));
+          console.log("Teachers updated from cloud:", data.teachers.length);
         }
 
         if (data.requests && Array.isArray(data.requests)) {
@@ -73,11 +81,12 @@ const App: React.FC = () => {
         }
         
         setLastSync(new Date());
+        setIsDataReady(true); // Mark data as ready
         return true;
       }
       return false;
     } catch (err) {
-      console.debug("Fetch sync failed:", err);
+      console.error("Fetch sync failed:", err);
       return false;
     }
   };
@@ -103,33 +112,40 @@ const App: React.FC = () => {
         syncUrlRef.current = activeSyncUrl;
         localStorage.setItem('sh_sync_url', activeSyncUrl);
 
-        // CRITICAL FIX: Fetch from cloud FIRST before loading local storage
+        // CRITICAL FIX 1: Load user from session first (but don't validate yet)
+        const savedUser = sessionStorage.getItem('sh_user');
+        if (savedUser) {
+          try { 
+            const parsedUser = JSON.parse(savedUser);
+            console.log("Found saved user:", parsedUser.email);
+            // We set user but we'll validate after data loads
+            setUser(parsedUser); 
+          } catch (e) { 
+            console.error("Failed to parse saved user:", e);
+            sessionStorage.removeItem('sh_user'); 
+          }
+        }
+
+        // CRITICAL FIX 2: TRY CLOUD FIRST, but with fallback
         let cloudDataLoaded = false;
         if (activeSyncUrl) {
           cloudDataLoaded = await fetchRegistryFromCloud(activeSyncUrl);
         }
 
-        const savedTeachers = localStorage.getItem('sh_teachers_v4');
-        const savedSubmissions = localStorage.getItem('sh_submissions_v2');
-        const savedRequests = localStorage.getItem('sh_resubmit_requests');
-        const savedUser = sessionStorage.getItem('sh_user');
-        
-        // Load user first
-        if (savedUser) {
-          try { 
-            setUser(JSON.parse(savedUser)); 
-          } catch (e) { 
-            sessionStorage.removeItem('sh_user'); 
-          }
-        }
-
-        // Load from local storage only if cloud fetch failed or returned empty
-        if (!cloudDataLoaded) {
+        // CRITICAL FIX 3: If cloud failed OR returned empty, check local storage
+        if (!cloudDataLoaded || teachers.length === 0) {
+          console.log("Falling back to local storage...");
+          const savedTeachers = localStorage.getItem('sh_teachers_v4');
+          const savedSubmissions = localStorage.getItem('sh_submissions_v2');
+          const savedRequests = localStorage.getItem('sh_resubmit_requests');
+          
           if (savedTeachers) {
             const t = JSON.parse(savedTeachers);
+            console.log("Loaded teachers from localStorage:", t.length);
             setTeachers(t);
             teachersRef.current = t;
           } else {
+            console.log("No local teachers, using INITIAL_TEACHERS");
             setTeachers(INITIAL_TEACHERS);
             teachersRef.current = INITIAL_TEACHERS;
           }
@@ -142,18 +158,77 @@ const App: React.FC = () => {
             setResubmitRequests(JSON.parse(savedRequests));
           }
         }
-        
-        // Final sync to ensure everything is up-to-date
+
+        // CRITICAL FIX 4: Final sync attempt
         if (activeSyncUrl) {
-          setTimeout(() => fetchRegistryFromCloud(activeSyncUrl), 500);
+          setTimeout(() => {
+            fetchRegistryFromCloud(activeSyncUrl);
+          }, 1000);
         }
         
+        setIsDataReady(true);
+        
+      } catch (error) {
+        console.error("Initialization error:", error);
       } finally {
         setIsInitializing(false);
       }
     };
     initialize();
   }, []);
+
+  // CRITICAL FIX 5: Validate saved user AFTER data is loaded
+  useEffect(() => {
+    if (user && isDataReady) {
+      console.log("Validating user after data load:", user);
+      
+      if ('isAdmin' in user) {
+        // Admin login - check if email matches admin
+        const adminEmail = user.email;
+        if (!adminEmail.includes('admin') && adminEmail !== 'gautam663@gmail.com') {
+          console.warn("Invalid admin email, logging out");
+          setUser(null);
+          sessionStorage.removeItem('sh_user');
+        }
+      } else {
+        // Teacher login - verify teacher exists
+        const teacherEmail = user.email.toLowerCase();
+        const teacherExists = teachers.some(t => 
+          t.email.toLowerCase() === teacherEmail
+        );
+        
+        if (!teacherExists) {
+          console.warn("Teacher not found in registry:", teacherEmail);
+          console.warn("Available teachers:", teachers.map(t => t.email));
+          
+          // Check if teacher exists in INITIAL_TEACHERS as fallback
+          const inInitial = INITIAL_TEACHERS.some(t => 
+            t.email.toLowerCase() === teacherEmail
+          );
+          
+          if (inInitial) {
+            console.log("Teacher found in INITIAL_TEACHERS, updating registry");
+            // Add missing teacher to current teachers
+            const missingTeacher = INITIAL_TEACHERS.find(t => 
+              t.email.toLowerCase() === teacherEmail
+            );
+            if (missingTeacher) {
+              const updatedTeachers = [...teachers, missingTeacher];
+              setTeachers(updatedTeachers);
+              teachersRef.current = updatedTeachers;
+              localStorage.setItem('sh_teachers_v4', JSON.stringify(updatedTeachers));
+            }
+          } else {
+            // Teacher truly doesn't exist - log them out
+            console.error("Teacher not found anywhere, logging out");
+            setUser(null);
+            sessionStorage.removeItem('sh_user');
+            alert("Your account is not registered in the system. Please contact administration.");
+          }
+        }
+      }
+    }
+  }, [user, teachers, isDataReady]);
 
   const updateSubmissions = async (newSubs: WeeklySubmission[]) => {
     setSubmissions(newSubs);
@@ -253,6 +328,26 @@ const App: React.FC = () => {
     alert("Database restored to defaults.");
   };
 
+  // Enhanced login handler that waits for data
+  const handleLogin = async (loggedInUser: Teacher | { email: string; isAdmin: true }) => {
+    console.log("Login attempt:", loggedInUser.email);
+    
+    // Wait for data to be ready if still initializing
+    if (!isDataReady) {
+      console.log("Waiting for data to load...");
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Set user immediately
+    setUser(loggedInUser);
+    sessionStorage.setItem('sh_user', JSON.stringify(loggedInUser));
+    
+    // Force a cloud sync
+    if (syncUrlRef.current) {
+      await fetchRegistryFromCloud(syncUrlRef.current);
+    }
+  };
+
   if (isInitializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-indigo-700 to-purple-800">
@@ -263,7 +358,7 @@ const App: React.FC = () => {
           </div>
           <div className="space-y-2">
             <p className="text-white font-black text-lg tracking-widest">INITIALIZING PORTAL</p>
-            <p className="text-white/70 text-sm font-medium">Establishing secure connection...</p>
+            <p className="text-white/70 text-sm font-medium">Loading teacher registry...</p>
           </div>
           <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 animate-pulse w-3/4"></div>
@@ -345,13 +440,11 @@ const App: React.FC = () => {
         <div className="max-w-6xl mx-auto">
           {!user ? (
             <Login 
-              onLogin={(u) => { 
-                setUser(u); 
-                sessionStorage.setItem('sh_user', JSON.stringify(u)); 
-              }} 
+              onLogin={handleLogin}  {/* Use enhanced handler */}
               teachers={teachers} 
               onSyncRegistry={fetchRegistryFromCloud} 
               syncUrl={syncUrl} 
+              isDataReady={isDataReady}  {/* Pass data readiness */}
             />
           ) : 'isAdmin' in user ? (
             <AdminDashboard 
