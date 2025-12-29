@@ -5,6 +5,9 @@ export const SCHOOL_NAME = "SACRED HEART SCHOOL";
 export const SCHOOL_SUBTITLE = "(Affiliated to CBSE, New Delhi, upto +2 Level)";
 export const ADMIN_EMAIL = "admin@sacredheartkoderma.org";
 export const PORTAL_LINK = "https://syllabuscompiler-ruddy.vercel.app/";
+// Add if not present
+export const SCHOOL_TIMEZONE = 'Asia/Kolkata'; // For India
+export const REMINDER_TIMES = ['13:00']; // 1 PM in 24-hour format
 
 /** 
  * HARDCODED BACKEND: Set this to your deployed Google Apps Script URL.
