@@ -1,4 +1,3 @@
-
 export type ClassLevel = 'I' | 'II' | 'III' | 'IV' | 'V' | 'VI' | 'VII' | 'VIII' | 'IX' | 'X' | 'XI' | 'XII';
 export type Section = 'A' | 'B' | 'C' | 'D';
 
@@ -56,15 +55,6 @@ export interface ClassTeacherInfo {
   section: Section;
 }
 
-// export interface ResubmitRequest {
-//   id: string;
-//   teacherId: string;
-//   teacherName: string;
-//   teacherEmail: string;
-//   weekStarting: string;
-//   timestamp: string;
-//   status: 'pending' | 'approved';
-// }
 export interface ResubmitRequest {
   id: string;
   teacherId: string;
@@ -73,7 +63,18 @@ export interface ResubmitRequest {
   weekStarting: string;
   status: 'pending' | 'approved' | 'declined';
   requestedAt: Date;
-  // Add these if you want to track email status
+  // Email notification status
   teacherNotified?: boolean;
   adminNotified?: boolean;
+}
+
+// Add this interface for email notification tracking
+export interface EmailNotification {
+  id: string;
+  teacherId: string;
+  teacherEmail: string;
+  type: 'submission' | 'reminder' | 'resubmit_request' | 'resubmit_approval' | 'resubmit_decline';
+  weekStarting: string;
+  sentAt: Date;
+  status: 'sent' | 'failed';
 }
