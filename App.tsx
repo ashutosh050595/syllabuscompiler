@@ -15,7 +15,7 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [showNotification, setShowNotification] = useState(true);
-  const [isDataReady, setIsDataReady] = useState(false); // NEW: Track when data is ready
+  const [isDataReady, setIsDataReady] = useState(false);
   
   const teachersRef = useRef<Teacher[]>([]);
   const syncUrlRef = useRef<string>('');
@@ -81,7 +81,7 @@ const App: React.FC = () => {
         }
         
         setLastSync(new Date());
-        setIsDataReady(true); // Mark data as ready
+        setIsDataReady(true);
         return true;
       }
       return false;
@@ -112,13 +112,12 @@ const App: React.FC = () => {
         syncUrlRef.current = activeSyncUrl;
         localStorage.setItem('sh_sync_url', activeSyncUrl);
 
-        // CRITICAL FIX 1: Load user from session first (but don't validate yet)
+        // Load user from session first
         const savedUser = sessionStorage.getItem('sh_user');
         if (savedUser) {
           try { 
             const parsedUser = JSON.parse(savedUser);
             console.log("Found saved user:", parsedUser.email);
-            // We set user but we'll validate after data loads
             setUser(parsedUser); 
           } catch (e) { 
             console.error("Failed to parse saved user:", e);
@@ -126,13 +125,13 @@ const App: React.FC = () => {
           }
         }
 
-        // CRITICAL FIX 2: TRY CLOUD FIRST, but with fallback
+        // Try cloud first
         let cloudDataLoaded = false;
         if (activeSyncUrl) {
           cloudDataLoaded = await fetchRegistryFromCloud(activeSyncUrl);
         }
 
-        // CRITICAL FIX 3: If cloud failed OR returned empty, check local storage
+        // If cloud failed OR returned empty, check local storage
         if (!cloudDataLoaded || teachers.length === 0) {
           console.log("Falling back to local storage...");
           const savedTeachers = localStorage.getItem('sh_teachers_v4');
@@ -159,7 +158,7 @@ const App: React.FC = () => {
           }
         }
 
-        // CRITICAL FIX 4: Final sync attempt
+        // Final sync attempt
         if (activeSyncUrl) {
           setTimeout(() => {
             fetchRegistryFromCloud(activeSyncUrl);
@@ -177,7 +176,7 @@ const App: React.FC = () => {
     initialize();
   }, []);
 
-  // CRITICAL FIX 5: Validate saved user AFTER data is loaded
+  // Validate saved user AFTER data is loaded
   useEffect(() => {
     if (user && isDataReady) {
       console.log("Validating user after data load:", user);
@@ -320,7 +319,9 @@ const App: React.FC = () => {
     setTeachers(newTeachers);
     teachersRef.current = newTeachers;
     localStorage.setItem('sh_teachers_v4', JSON.stringify(newTeachers));
-    cloudPost(syncUrlRef.current || syncUrl, { action: 'SYNC_REGISTRY', teachers: newTeachers });
+    if (syncUrlRef.current || syncUrl) {
+      cloudPost(syncUrlRef.current || syncUrl, { action: 'SYNC_REGISTRY', teachers: newTeachers });
+    }
   };
 
   const handleManualResetRegistry = async () => {
@@ -328,7 +329,7 @@ const App: React.FC = () => {
     alert("Database restored to defaults.");
   };
 
-  // Enhanced login handler that waits for data
+  // Enhanced login handler
   const handleLogin = async (loggedInUser: Teacher | { email: string; isAdmin: true }) => {
     console.log("Login attempt:", loggedInUser.email);
     
@@ -440,11 +441,11 @@ const App: React.FC = () => {
         <div className="max-w-6xl mx-auto">
           {!user ? (
             <Login 
-              onLogin={handleLogin}  {/* Use enhanced handler */}
+              onLogin={handleLogin}
               teachers={teachers} 
               onSyncRegistry={fetchRegistryFromCloud} 
-              syncUrl={syncUrl} 
-              isDataReady={isDataReady}  {/* Pass data readiness */}
+              syncUrl={syncUrl}
+              isDataReady={isDataReady}
             />
           ) : 'isAdmin' in user ? (
             <AdminDashboard 
