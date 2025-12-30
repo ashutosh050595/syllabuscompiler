@@ -89,6 +89,7 @@ const AdminDashboard: React.FC<Props> = ({
       }
     } catch (error) {
       console.error('Compilation error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setCompileStatus(`❌ Error: ${error.message}`);
     } finally {
       setIsCompiling(false);
