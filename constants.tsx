@@ -13,7 +13,7 @@ export const REMINDER_TIMES = ['13:00']; // 1 PM in 24-hour format
  * HARDCODED BACKEND: Set this to your deployed Google Apps Script URL.
  * This ensures new devices automatically connect without manual setup.
  */
-export const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbymQppLkpZrIdBylwYaI-HTB8WfeDqLrOpZeMy1qtoTvRwh9iBIcdCYCy4xtvfyCmo3Kg/exec"; 
+export const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbyJvFjqPDTtdshbgCO8ff-5VbKCZT3UIYyV6fpqhX8Bf2pJmRjmDKO-2yoA6ucCiHQg/exec"; 
 
 export const SCHOOL_LOGO_URL = "logo.png"; 
 
